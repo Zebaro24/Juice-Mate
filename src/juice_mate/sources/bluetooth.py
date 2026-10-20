@@ -15,10 +15,15 @@ from collections.abc import Iterable
 from ctypes import wintypes
 from dataclasses import dataclass
 
-from juice_mate.core.reading import Reading
+from juice_mate.core.reading import Kind, Reading
 
 SOURCE = "bluetooth"
 _DEVICE_NODE = re.compile(r"^BTH(ENUM|LE)\\DEV_", re.IGNORECASE)
+_SERVICE = re.compile(r"\{0000([0-9A-F]{4})-0000-1000-8000-00805F9B34FB\}", re.IGNORECASE)
+# Bluetooth profile UUIDs a device exposes, as seen in its nodes' instance ids.
+_HEADSET_SERVICES = {"111E", "110B", "1108"}  # Hands-Free unit, A2DP sink, Headset
+_PHONE_SERVICES = {"111F", "1132", "112F", "1112"}  # Hands-Free gateway, MAP (SMS), PBAP, Headset gateway
+_GAMEPAD_NAME = re.compile(r"controller|gamepad|joystick|joy-con", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -30,6 +35,26 @@ class Node:
     battery: int | None
     connected: bool | None
     container: str | None
+    device_class: str | None = None
+
+
+def kind(members: Iterable[Node], name: str) -> Kind:
+    """What the device is, from the classes and Bluetooth profiles of all its nodes — not its name,
+    except for game controllers, which expose nothing more specific than HID."""
+    members = list(members)
+    classes = {(n.device_class or "").lower() for n in members}
+    services = {m.group(1).upper() for n in members for m in _SERVICE.finditer(n.instance_id)}
+    if "keyboard" in classes:
+        return Kind.KEYBOARD
+    if "mouse" in classes:
+        return Kind.MOUSE
+    if services & _PHONE_SERVICES:
+        return Kind.PHONE
+    if services & _HEADSET_SERVICES:
+        return Kind.HEADSET
+    if _GAMEPAD_NAME.search(name):
+        return Kind.GAMEPAD
+    return Kind.OTHER
 
 
 def merge(nodes: Iterable[Node]) -> list[Reading]:
@@ -63,6 +88,7 @@ def merge(nodes: Iterable[Node]) -> list[Reading]:
                 name=name,
                 percent=max(0, min(best.battery or 0, 100)),
                 connected=bool(live),
+                kind=kind(members, name),
             )
         )
     return sorted(readings, key=lambda r: r.name.lower())
@@ -100,6 +126,7 @@ def _key(fmtid: str, pid: int) -> _PropKey:
 BATTERY = _key("{104EA319-6EE2-4701-BD47-8DDBF425BBE5}", 2)  # DEVPKEY_Bluetooth_Battery
 CONNECTED = _key("{83DA6326-97A6-4088-9453-A1923F573B29}", 15)
 FRIENDLY_NAME = _key("{A45C254E-DF1C-4EFD-8020-67D146A850E0}", 14)  # DEVPKEY_Device_FriendlyName
+DEVICE_CLASS = _key("{A45C254E-DF1C-4EFD-8020-67D146A850E0}", 9)  # DEVPKEY_Device_Class
 DEVICE_DESC = _key("{A45C254E-DF1C-4EFD-8020-67D146A850E0}", 2)  # DEVPKEY_Device_DeviceDesc
 CONTAINER_ID = _key("{8C7ED206-3F8A-4827-B3AB-AE9E1FAEFC6C}", 2)  # DEVPKEY_Device_ContainerId
 
@@ -168,6 +195,7 @@ class _DeviceList:
                 continue
             connected = self._prop(info, CONNECTED)
             name = self._prop(info, FRIENDLY_NAME) or self._prop(info, DEVICE_DESC)
+            device_class = self._prop(info, DEVICE_CLASS)
             found.append(
                 Node(
                     instance_id=self._instance_id(info),
@@ -175,6 +203,7 @@ class _DeviceList:
                     battery=batteries.get(i),
                     connected=connected if isinstance(connected, bool) else None,
                     container=containers.get(i),
+                    device_class=device_class if isinstance(device_class, str) else None,
                 )
             )
         return found

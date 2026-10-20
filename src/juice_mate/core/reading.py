@@ -6,6 +6,17 @@ from enum import StrEnum
 LOW_PERCENT = 20
 
 
+class Kind(StrEnum):
+    """What a device is — picks its glyph on the panel."""
+
+    KEYBOARD = "keyboard"
+    MOUSE = "mouse"
+    HEADSET = "headset"
+    GAMEPAD = "gamepad"
+    PHONE = "phone"
+    OTHER = "other"
+
+
 class Level(StrEnum):
     OK = "ok"
     LOW = "low"
@@ -25,6 +36,7 @@ class Reading:
     connected: bool = True
     charging: bool | None = None
     error: str | None = None
+    kind: Kind = Kind.OTHER
 
 
 def level(reading: Reading, low: int = LOW_PERCENT) -> Level:

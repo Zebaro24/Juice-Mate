@@ -13,7 +13,7 @@ Ordered by dependency. ✅ done · ⚠️ written, not verified on the real targ
 | 01 | Skeleton and gate: `pyproject.toml` (Poetry, ruff, mypy strict, pytest), `src/juice_mate/`, `core` reading model, an empty tray icon that quits from the menu | ✅ · ⚠️ Quit clicked by the owner |
 | 02 | Bluetooth source (§3.1): battery + connected state, any device; shown as interim tray icons | ✅ · ⚠️ seen only with every device disconnected |
 | 02b | System sensors (§4a) as components: network, CPU, memory, GPU load, GPU temp, disk — readable with `--dump`, not shown yet | ✅ |
-| 03 | Taskbar panel (§4b, §6): spike first — attach to `Shell_TrayWnd`, survive Explorer restart, auto-hide, full screen, light/dark — then glyph + % per device in the system style, tooltip, right-click menu; the tray icons go | |
+| 03 | Taskbar panel (§4b, §6): spike first — attach to `Shell_TrayWnd`, survive Explorer restart, auto-hide, full screen, light/dark — then glyph + % per device in the system style, tooltip, right-click menu; the tray icons go | ✅ · ⚠️ Explorer restart, auto-hide, full screen and a light taskbar not yet tried; the menu not clicked |
 | 04 | Hator source (§3.2): HID feature report, smoothing, charging via PID 5B49 | |
 | 05 | Claude source (§3.3): confirm the usage endpoint, read-only token, 5 h + weekly item | |
 | 06 | Thresholds and toasts (§6), autostart toggle | |

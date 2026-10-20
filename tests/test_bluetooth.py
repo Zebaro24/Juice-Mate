@@ -1,7 +1,9 @@
 import uuid
 
-from juice_mate.core.reading import Level, level
-from juice_mate.sources.bluetooth import Node, decode, merge
+import pytest
+
+from juice_mate.core.reading import Kind, Level, level
+from juice_mate.sources.bluetooth import Node, decode, kind, merge
 
 
 def node(**kw: object) -> Node:
@@ -82,6 +84,29 @@ def test_readings_are_sorted_by_name_and_clamped() -> None:
     readings = merge([node(name="b", container="1", battery=150), node(name="A", container="2")])
     assert [r.name for r in readings] == ["A", "b"]
     assert readings[1].percent == 100
+
+
+@pytest.mark.parametrize(
+    ("members", "name", "expected"),
+    [
+        ([node(device_class="Keyboard"), node(device_class="HIDClass")], "MX KEYS S", Kind.KEYBOARD),
+        ([node(device_class="Mouse")], "MX Master", Kind.MOUSE),
+        ([node(instance_id="BTHENUM\\{0000111E-0000-1000-8000-00805F9B34FB}_VID&000107E3_")], "G435", Kind.HEADSET),
+        ([node(instance_id="BTHENUM\\{0000110B-0000-1000-8000-00805F9B34FB}_VID&000107E3_")], "Buds", Kind.HEADSET),
+        (
+            [
+                node(instance_id="BTHENUM\\{0000111F-0000-1000-8000-00805F9B34FB}_VID&0001038F_"),
+                node(instance_id="BTHENUM\\{0000110A-0000-1000-8000-00805F9B34FB}_VID&0001038F_"),
+            ],
+            "Zebaro-Phone",
+            Kind.PHONE,
+        ),
+        ([node(device_class="HIDClass")], "Xbox Wireless Controller", Kind.GAMEPAD),
+        ([node(device_class="HIDClass")], "Some Tracker", Kind.OTHER),
+    ],
+)
+def test_kind(members: list[Node], name: str, expected: Kind) -> None:
+    assert kind(members, name) is expected
 
 
 def test_decode() -> None:

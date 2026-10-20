@@ -1,7 +1,8 @@
 from typing import Any
 
 from juice_mate.core.reading import Reading
-from juice_mate.tray.icons import TrayIcons, poll_all
+from juice_mate.sources import poll_all
+from juice_mate.tray.icons import TrayIcons
 
 
 class FakeIcon:

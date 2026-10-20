@@ -30,3 +30,19 @@ all correctly *disconnected* (cached %). ⚠️ Not yet seen with a device conne
 `sources/system.py`: `NetworkSpeed`, `CpuLoad`, `MemoryLoad`, `DiskUsage`, `DiskSpeed`, `GpuLoad`
 (PDH, Task Manager's number), `GpuTemperature` (NVML; NVIDIA only). All read on the owner's PC
 (GPU temp 52°). Not shown anywhere yet except `--dump` — the taskbar panel (step 08) shows them.
+
+## Step 03 — taskbar panel (2026-10-20)
+
+The tray icons are gone from the normal path: `panel/window.py` creates a layered window, re-parents
+it into `Shell_TrayWnd` and places it just left of `TrayNotifyWnd`; `panel/render.py` draws each
+device as a Segoe Fluent Icons glyph + percent in the taskbar's text colour, with Windows-like
+antialiasing weight (alpha gamma 0.45). Disconnected → the glyph struck through and no number; low →
+system red; charging → bolt; unavailable → warning badge. Device kind comes from the Bluetooth
+profiles and device classes of the container (G435 headset, MX KEYS S keyboard, Xbox controller
+gamepad, Zebaro-Phone phone — all correct on the owner's PC). Hover → a system tooltip with name,
+state and time; right-click → Refresh now / Quit. A 2 s watchdog and `TaskbarCreated` re-attach after
+Explorer restarts. One instance only (named mutex); log at `%LOCALAPPDATA%\JuiceMate\juice-mate.log`.
+Tray icons remain only as the fallback when the panel cannot attach. Running: ~35 MB RAM.
+
+Seen on the owner's PC: the panel in place, the tooltip on hover. ⚠️ Not tried yet: Explorer restart,
+auto-hide, full-screen apps, a light taskbar, the right-click menu, a second monitor.

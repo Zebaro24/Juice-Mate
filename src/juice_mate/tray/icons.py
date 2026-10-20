@@ -1,4 +1,4 @@
-"""One tray icon per device, kept in step with the readings (docs/architecture.md §6).
+"""Fallback only: tray icons when the taskbar panel cannot attach (docs/architecture.md §4b).
 
 pystray on Windows runs every detached icon in its own thread with its own message loop, so icons
 come and go independently. When no device is found, one grey placeholder keeps the menu reachable.
@@ -14,36 +14,13 @@ from typing import Any
 
 import pystray
 
-from juice_mate.core.reading import Level, Reading, label, level
-from juice_mate.sources import Source
+from juice_mate.core.display import tooltip
+from juice_mate.core.reading import Level, label, level
+from juice_mate.sources import Source, poll_all
 from juice_mate.tray.drawing import draw
 
 POLL_SECONDS = 30
 _PLACEHOLDER = "__placeholder__"
-
-
-def tooltip(reading: Reading, now: datetime) -> str:
-    lvl = level(reading)
-    if reading.error:
-        state = f"unavailable: {reading.error}"
-    elif lvl is Level.OFFLINE:
-        state = "disconnected"
-    else:
-        state = f"{reading.percent}%" + (" · charging" if lvl is Level.CHARGING else "")
-    # Windows cuts tray tooltips at 127 characters.
-    return f"{reading.name} — {state} · {now:%H:%M}"[:127]
-
-
-def poll_all(sources: Sequence[Source]) -> list[Reading]:
-    """A source that raises becomes one error reading — the tray never stops over it."""
-    readings = []
-    for source in sources:
-        try:
-            readings.extend(source.poll())
-        except Exception as e:  # any bug in a source must not end the poll loop
-            name = type(source).__name__
-            readings.append(Reading(source=name, device_id=name, name=name, percent=None, error=repr(e)))
-    return readings
 
 
 class TrayIcons:

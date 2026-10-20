@@ -1,7 +1,7 @@
 from datetime import datetime
 
+from juice_mate.core.display import tooltip
 from juice_mate.core.reading import Reading
-from juice_mate.tray.icons import tooltip
 
 NOON = datetime(2026, 10, 20, 12, 5)
 
