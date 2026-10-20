@@ -14,6 +14,8 @@ python = ">=3.13,<3.14"
 # --- Tray icon (native NotifyIcon underneath) and drawing the numbers on it ---
 pystray = "^0.19.5"
 pillow = "^13.0.0"
+# --- System sensors: network, CPU, memory, disk (no kernel driver) ---
+psutil = "^7.2.2"
 
 # ───────────────────────────────────────────────────────────────────────────
 # Development dependencies
@@ -23,6 +25,7 @@ ruff = "^0.17.1"
 mypy = "^2.4.0"
 pytest = "^9.1.1"
 pip-audit = "^2.10.1"
+types-psutil = "^7.2.2.20260906"
 
 [build-system]
 requires = ["poetry-core"]

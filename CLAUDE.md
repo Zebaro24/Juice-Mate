@@ -10,7 +10,8 @@ HTML comments like this one are stripped before loading and cost no tokens.
 
 # Juice-Mate
 
-Windows tray app: battery of Bluetooth/HID devices and Claude usage limits, with self-updating installer
+Windows taskbar app: battery of Bluetooth/HID devices, Claude usage limits and system sensors, shown on
+the taskbar itself in the system's style; self-updating installer
 
 ## Where to look
 
@@ -46,7 +47,8 @@ the machine without the owner's word.**
 ```
 src/juice_mate/core/      pure logic: readings, smoothing, thresholds, icon state (no IO)
 src/juice_mate/sources/   one file per data source: bluetooth, hator (HID), claude (usage)
-src/juice_mate/tray/      pystray icons, Pillow drawing, menu, toasts
+src/juice_mate/panel/     the taskbar panel: Win32 window inside Shell_TrayWnd, drawing, menu
+src/juice_mate/tray/      interim tray icons (go at step 03); later only the fallback icon and toasts
 src/juice_mate/update/    Velopack wiring, autostart
 tests/                    pytest; sources mocked, core covered fully
 docs/                     architecture.md (the spec), plan/ (the steps)
@@ -61,7 +63,8 @@ _ideas/ _temp/ _secrets/   outside git
 python scripts/gate.py               # the only checker; --changed | --target <t> | --strict | --list
 ```
 
-Python 3.13 + Poetry. Run the app: `poetry run python -m juice_mate` (from step 01).
+Python 3.13 + Poetry. Run the app without a console window: `scripts\run.bat` (pythonw);
+print every reading once: `poetry run python -m juice_mate --dump`.
 There is no server and no prod: "production" is the installed app on the owner's and a second PC.
 
 ## Rules for every part
@@ -70,9 +73,11 @@ There is no server and no prod: "production" is the installed app on the owner's
   rotates the token and logs Claude Code out.
 - **Nothing hard-coded to the owner's hardware**: every source discovers what is present; nothing found
   → no icon. The app also runs on a second, non-technical user's PC.
-- **A source never crashes the tray**: errors become a "data unavailable" reading.
+- **A source never crashes the app**: errors become a "data unavailable" reading.
 - **No admin, no UAC, no blocking prompts** — install, autostart and updates are per-user.
 - `core/` stays pure (enforced by `scripts/arch_lint.py`).
+- **The UI is the taskbar panel, never tray icons** (owner's decision). It must look like part of
+  Windows: system glyph font, taskbar text colour, no boxes.
 
 - **Never weaken or unwire a guard** (`.claude/project.json`, `.claude/settings.json`) without the
   owner's word — they are editable so they can evolve, not so they can be switched off.

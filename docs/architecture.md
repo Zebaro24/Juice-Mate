@@ -8,13 +8,13 @@ code: src/juice_mate/** · pyproject.toml
 
 ## 1. Goal
 
-A Windows tray utility that shows, at a glance, one icon per device with its battery % and one icon
-for Claude usage limits. It must run unnoticed (target < 60 MB RAM), start with Windows, and **update
+A Windows utility that shows, **on the taskbar itself** (not in the tray — owner, 2026-10-20), each
+device's battery %, Claude usage limits and chosen system sensors, in the system's own visual style. It must run unnoticed (target < 60 MB RAM), start with Windows, and **update
 itself without anyone touching it** — it will be installed on a second, non-technical user's PC.
 
 Rules that follow from the second PC:
 - **Nothing is hard-coded to the owner's hardware.** Every source discovers what is present; a source
-  that finds nothing shows no icon. No config is required to get a useful result.
+  that finds nothing shows nothing. No config is required to get a useful result.
 - **No admin rights, no UAC, no prompts** — install and updates are per-user.
 
 ## 2. Stack — LOCKED (owner, 2026-10-20)
@@ -22,7 +22,7 @@ Rules that follow from the second PC:
 | Concern | Choice | Why |
 | ------- | ------ | --- |
 | Language | Python 3.13, Poetry | the owner's main language; same tooling as Zebaro-Core-Bot / YA-32-Bot |
-| Tray | `pystray` + `Pillow` (icons drawn at runtime) | small, native `NotifyIcon` underneath |
+| Display | a Win32 window inside the taskbar via `ctypes`, drawn with `Pillow`, glyphs from Segoe Fluent Icons | §4b, §6 |
 | Bluetooth battery | Windows PnP device properties (CfgMgr32 via `ctypes`, or `winrt` DeviceInformation) | see §3.1 |
 | HID | `hidapi` (`hid` package) | feature reports for the Hator dongle, §3.2 |
 | HTTP | `httpx` | Claude usage, §3.3 |
@@ -37,14 +37,14 @@ Electron (RAM).
 
 Every source implements one interface: `poll() -> list[Reading]`. A `Reading` is
 `(source_id, device_id, name, percent | None, charging: bool | None, connected: bool, stale_after)`.
-A failing source returns an error reading, never raises into the tray loop.
+A failing source returns an error reading, never raises into the poll loop.
 
 ### 3.1 Bluetooth devices (MX Keys S, G435, any BT device that reports battery)
 
 - Battery: property `DEVPKEY_Bluetooth_Battery` = `{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2`.
 - Connected: `{83DA6326-97A6-4088-9453-A1923F573B29} 15`. **Must be checked** — when a device is
   disconnected Windows still returns the last cached battery value (seen with an Xbox controller).
-  Disconnected → grey icon, no %.
+  Disconnected → the device glyph dimmed with a "disconnected" mark, no %.
 
 ### 3.2 Hator Stellar Pro Wireless (HID)
 
@@ -64,17 +64,19 @@ A failing source returns an error reading, never raises into the tray loop.
   reset time. The endpoint is internal and undocumented: confirm it on the spot (step 04), keep the
   parsing in one module with a schema version, and degrade to "data unavailable" instead of crashing.
 - Poll no more than once a minute.
-- No credentials file → no Claude icon (the second PC).
+- No credentials file → no Claude item (the second PC).
 
 ## 4. Install and self-update
 
 **Velopack** over a PyInstaller `--onedir` build:
 - `Setup.exe` installs into `%LocalAppData%\JuiceMate` — per-user, no admin, no UAC; creates the Start
-  menu shortcut; the app registers its own autostart (HKCU `Run`), toggled from the tray menu.
+  menu shortcut; the app registers its own autostart (HKCU `Run`), toggled from the panel's menu.
 - On start and every 6 h the app checks for an update, downloads it in the background (delta
-  packages), and applies it **on the next start** or from the tray menu item "Restart to update".
+  packages), and applies it **on the next start** or from the panel's menu item "Restart to update".
   Never restarts under the user on its own.
 - `vpk` is a .NET tool — needed only in CI (`windows-latest`), never on the user's PC.
+- **No console window, ever**: PyInstaller builds with `--windowed`; in development the app runs
+  under `pythonw.exe`. Then `sys.stdout` / `sys.stderr` are `None` — code must not assume them.
 - The app must call `velopack.App().run()` first thing in `main` (install/update hooks).
 
 ### 4.1 Where updates are downloaded from — LOCKED (owner, 2026-10-20)
@@ -89,24 +91,90 @@ second "releases" repo and a Cloudflare Worker proxy were rejected as extra movi
 Consequence: **nothing secret ever goes into the repo** — no tokens, no personal device serials, no
 account ids. The Hator protocol and the Claude usage call are public by choice.
 
+## 4a. System sensors — replaces TrafficMonitor (owner, 2026-10-20)
+
+TrafficMonitor is flagged by Defender because of `TrafficMonitor.sys`, the WinRing0 kernel driver it
+installs for CPU temperature. Juice-Mate reads **only what needs no driver**. Each reading is a
+`Sensor` class in `sources/system.py` (`read() -> Metric`); which ones are shown, and where, the owner
+decides later — the classes exist so that choice is configuration, not code.
+
+| Sensor | Value | How |
+| ------ | ----- | --- |
+| `NetworkSpeed("up" / "down")` | bytes/s | `psutil.net_io_counters()` delta between two reads |
+| `CpuLoad` | % | `psutil.cpu_percent()` |
+| `MemoryLoad` | % | `psutil.virtual_memory().percent` |
+| `DiskUsage(path)` | % | `psutil.disk_usage(path).percent` |
+| `DiskSpeed("read" / "write")` | bytes/s | `psutil.disk_io_counters()` delta |
+| `GpuLoad` | % | PDH counter `\GPU Engine(*engtype_3D)\Utilization Percentage` — what Task Manager shows |
+| `GpuTemperature` | °C | NVML (`nvml.dll`, ships with the NVIDIA driver); no NVIDIA → `error` |
+
+Not read: **CPU temperature** — it needs ring 0, which is exactly what got TrafficMonitor flagged.
+A sensor that cannot read returns a `Metric` with `error`, never raises.
+
+## 4b. Taskbar panel — LOCKED: the only UI; no tray icons (owner, 2026-10-20)
+
+Everything is shown on the taskbar itself, the way TrafficMonitor shows its numbers: device
+batteries, Claude limits, the system sensors the owner picks. Tray icons were tried and rejected —
+Windows 11 hides them behind "^", and they hold two digits at most.
+
+How, chosen for robustness:
+- **A child of the taskbar, not a floating window.** The panel window is re-parented into
+  `Shell_TrayWnd` (`SetParent`, `WS_CHILD`). It then moves, hides (auto-hide, full-screen games) and
+  stacks with the taskbar for free. Rejected: a topmost overlay — it fights the taskbar for z-order,
+  shows over full-screen apps, and flickers when the taskbar takes focus.
+- **Placement.** Windows 11: right-aligned just left of `TrayNotifyWnd` (still a Win32 child of
+  `Shell_TrayWnd`), plus a configurable offset. Windows 10: shrink `MSTaskSwWClass` inside
+  `ReBarWindow32` and sit in the gap — TrafficMonitor's own Win10 method.
+- **Drawing.** Pillow renders RGBA, `UpdateLayeredWindow` pushes it with per-pixel alpha, so it blends
+  with any taskbar colour or Mica (layered child windows work since Windows 8). Text colour follows
+  `SystemUsesLightTheme`.
+- **Staying attached.** Listen for the registered `TaskbarCreated` message (Explorer restarted →
+  re-attach); a 2 s watchdog re-checks the parent handle and the free space; `WM_DISPLAYCHANGE` and
+  DPI changes → re-layout.
+- **Its own thread** with its own Win32 message loop; the poll loop hands it readings.
+- **Fails quietly.** Cannot attach → a single tray icon appears *only then*, so the menu (Quit,
+  autostart) stays reachable and its tooltip says "Taskbar panel unavailable".
+- Main monitor first; `Shell_SecondaryTrayWnd` (other monitors) later.
+- Right-click on the panel → the menu: Refresh, Start with Windows, Restart to update, Quit.
+
+Risk: Windows 11 feature updates have reshaped the taskbar before. The panel step starts with a
+spike that measures attach, Explorer restart, auto-hide and full screen on the real PC.
+
 ## 5. Layout
 
 ```
 src/juice_mate/
-  core/        readings, smoothing, thresholds, icon state — pure, no IO, fully unit-tested
-  sources/     bluetooth.py, hator.py, claude.py — one file per source, IO lives here
-  tray/        pystray icons, Pillow drawing, menu, toasts
+  core/        readings, metrics, formatting, thresholds, icon state — pure, no IO, fully unit-tested
+  sources/     bluetooth.py, hator.py, claude.py, system.py — one file per source, IO lives here
+  panel/       the taskbar panel (§4b): Win32 window, layout, drawing, menu
+  tray/        the fallback tray icon only (§4b), toasts
   update/      Velopack wiring, autostart
-  app.py       poll loop: sources → core → tray
+  app.py       poll loop: sources → core → panel
 tests/
 ```
 
-Layering (checked by `scripts/arch_lint.py`): `core` imports nothing from `sources`, `tray`, `update`
-or any IO library; `sources` never import `tray`.
+Layering (checked by `scripts/arch_lint.py`): `core` imports nothing from `sources`, `panel`, `tray`,
+`update` or any IO library; `sources` never import `panel` or `tray`.
 
-## 6. Icons
+## 6. Look — the system's own style (owner, 2026-10-20)
 
-One tray icon per reading: the number drawn on a 32×32 image. Red below the threshold (default 20 %),
-⚡ mark while charging, grey when disconnected. Tooltip: name, %, state, last update. A toast once when
-a device drops below 15 % (not again until it recovers). The Claude icon shows the larger of the two
-windows' % used; the tooltip shows both with time to reset.
+Each item on the panel is **a glyph and a number**, nothing else — like the clock and the Wi-Fi /
+volume glyphs next to it:
+
+```
+ ⌨ 45%   🎧 80%   🖱 ⚡62%   ✳ 37%      (glyphs from Segoe Fluent Icons, not emoji)
+```
+
+- **Glyphs** come from the font Windows 11 draws its own icons with, Segoe Fluent Icons (Segoe MDL2
+  Assets on Windows 10): keyboard, headphones, mouse, game controller, phone, a generic Bluetooth
+  glyph when the kind is unknown. The kind comes from the device's Windows category (the same one
+  Settings → Bluetooth uses for its icons), not from the name.
+- **Text** in Segoe UI Variable at the taskbar's size, in the taskbar's text colour (light/dark
+  theme), no background, no boxes — it must look like part of Windows.
+- **Disconnected** → the glyph dimmed with a small "disconnected" mark, no number (the cached % is
+  misleading). Charging → a small bolt before the number. Low (< 20 %) → the number turns red
+  (system red). Unavailable (error) → the glyph dimmed with "!", the reason in the tooltip.
+- **Claude** → the Claude glyph + the larger of the two windows' % used; red from 80 %.
+- **Tooltip** on hover: the full name, state, the time of the reading; for Claude both windows with
+  the time to reset.
+- A toast once when a device drops below 15 % (not again until it recovers).

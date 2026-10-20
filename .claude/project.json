@@ -133,7 +133,7 @@
       "files": [
         "src/juice_mate/core/**/*.py"
       ],
-      "forbid": "^\\s*(from|import)\\s+(juice_mate\\.(sources|tray|update)|pystray|PIL|hid|httpx|winrt|ctypes|velopack)\\b",
+      "forbid": "^\\s*(from|import)\\s+(juice_mate\\.(sources|tray|panel|update)|pystray|PIL|hid|httpx|winrt|ctypes|velopack)\\b",
       "why": "core holds pure logic only; IO lives in sources/, tray/, update/"
     },
     {
@@ -141,7 +141,7 @@
       "files": [
         "src/juice_mate/sources/**/*.py"
       ],
-      "forbid": "^\\s*(from|import)\\s+(juice_mate\\.tray|pystray|PIL)\\b",
+      "forbid": "^\\s*(from|import)\\s+(juice_mate\\.(tray|panel)|pystray|PIL)\\b",
       "why": "a source returns readings; the tray decides how they look"
     }
   ]
