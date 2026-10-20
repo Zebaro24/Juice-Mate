@@ -4,3 +4,13 @@ _temp/
 _secrets/
 .claude/settings.local.json
 .claude/.approve-*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/

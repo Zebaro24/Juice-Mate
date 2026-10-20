@@ -10,7 +10,7 @@ Ordered by dependency. ✅ done · ⚠️ written, not verified on the real targ
 
 | #  | Step | State |
 | -- | ---- | ----- |
-| 01 | Skeleton and gate: `pyproject.toml` (Poetry, ruff, mypy strict, pytest), `src/juice_mate/`, `core` reading model, an empty tray icon that quits from the menu | |
+| 01 | Skeleton and gate: `pyproject.toml` (Poetry, ruff, mypy strict, pytest), `src/juice_mate/`, `core` reading model, an empty tray icon that quits from the menu | ✅ · ⚠️ Quit clicked by the owner |
 | 02 | Bluetooth source (§3.1): battery + connected state, any device; icons with numbers, tooltip | |
 | 03 | Hator source (§3.2): HID feature report, smoothing, charging via PID 5B49 | |
 | 04 | Claude source (§3.3): confirm the usage endpoint, read-only token, 5 h + weekly icon | |
@@ -19,7 +19,9 @@ Ordered by dependency. ✅ done · ⚠️ written, not verified on the real targ
 | 07 | Install on both PCs, uninstall Hator Hub and Frida | |
 
 Later (not v0.1): popover window with all readings and reset timers; laptop battery; Android phone
-via ADB; usage pace forecast; history. Source ideas: the Bento note "Трей-программа — идеи, названия, анализ".
+via ADB; usage pace forecast; history; a driver-free replacement for TrafficMonitor (network speed,
+CPU / GPU load) — open questions in `_ideas/system-monitor-without-driver.md`. Source ideas: the
+Bento note "Tray app — ideas, names, analysis".
 
 Every step: **Read** docs/architecture.md (the § named) · **Done when** `python scripts/gate.py` is
 GREEN and the behaviour named in the row is visible in the tray on the owner's PC.

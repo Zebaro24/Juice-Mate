@@ -1,7 +1,7 @@
 ---
 owns: Stack, layout, the data sources and how each is read, the update channel, what talks to what.
 not:  The order of building (docs/plan/) · process (.claude/docs/)
-code: none — written ahead of the code; src/juice_mate/** and pyproject.toml appear at step 01
+code: src/juice_mate/** · pyproject.toml
 ---
 
 # Architecture
@@ -77,23 +77,17 @@ A failing source returns an error reading, never raises into the tray loop.
 - `vpk` is a .NET tool — needed only in CI (`windows-latest`), never on the user's PC.
 - The app must call `velopack.App().run()` first thing in `main` (install/update hooks).
 
-### 4.1 Where updates are downloaded from — PROPOSAL
+### 4.1 Where updates are downloaded from — LOCKED (owner, 2026-10-20)
 
-The repo `Zebaro24/Juice-Mate` is private. GitHub has **no release-only token**: downloading a
-release asset needs `Contents: read`, which also reads the source. A token inside the app is a token
-for everyone who has the app. A second "releases" repo was rejected by the owner.
+**The repo `Zebaro24/Juice-Mate` is public**, and the app reads updates from its GitHub Releases with
+Velopack's GitHub source — no token anywhere, no server.
 
-Options, best first:
-1. **Cloudflare Worker proxy** (recommended). CI publishes to this repo's GitHub Releases as usual.
-   A ~40-line Worker on `juice.zebaro.dev/updates/*` holds a fine-grained token (this repo only,
-   `Contents: read`) as a Worker secret and serves **only** release assets of the latest releases
-   (`releases.win.json`, `*.nupkg`, `Setup.exe`). The app uses Velopack's plain HTTP source. Free tier,
-   no server to keep alive, zebaro.dev is already on Cloudflare. Token expiry → a Bento reminder.
-2. **Make the repo public** and use Velopack's GitHub source directly. Simplest; the cost is that
-   the Hator protocol and the Claude usage call are public (other open-source tools already do the
-   latter).
+Why not private: GitHub has no release-only token (a release asset needs `Contents: read`, which
+also reads the source), so a token inside the app is the source for everyone who has the app. A
+second "releases" repo and a Cloudflare Worker proxy were rejected as extra moving parts.
 
-Decide before step 06.
+Consequence: **nothing secret ever goes into the repo** — no tokens, no personal device serials, no
+account ids. The Hator protocol and the Claude usage call are public by choice.
 
 ## 5. Layout
 

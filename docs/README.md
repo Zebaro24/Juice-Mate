@@ -12,6 +12,7 @@ Grep the **Code** column for a source path to find the page that documents it.
 | ---- | ---- | ---- |
 | [architecture.md](architecture.md) | stack, sources, install and self-update, layout, icons | `src/juice_mate/**`, `pyproject.toml`, `.github/workflows/**` |
 | [plan/](plan/README.md) | the order of building, state of each step | — |
+| [status.md](status.md) | what already works, what is unverified | `src/juice_mate/**` |
 
 A big document is a folder: one section per file (`§N` → `N-....md`), the folder's `README.md` is its
 index. Every page opens with an `owns:` / `not:` / `code:` header.
