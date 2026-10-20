@@ -1,0 +1,6 @@
+# Claude harness — personal / local
+_ideas/
+_temp/
+_secrets/
+.claude/settings.local.json
+.claude/.approve-*

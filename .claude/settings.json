@@ -1,0 +1,108 @@
+{
+  "permissions": {
+    "_mode_note": "auto: the classifier waves through what is safe and stops what is destructive. It does NOT weaken this project's rules: the guards are PreToolUse hooks, and a hook denial is not a permission prompt. Deny rules below also still win.",
+    "defaultMode": "auto",
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Edit",
+      "Write",
+      "Bash(python scripts/*)",
+      "Bash(py scripts/*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git switch:*)",
+      "Bash(git branch:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh repo view:*)"
+    ],
+    "_note": "Linters and test runners are deliberately NOT allowed: checks run only through scripts/gate.py, which calls them itself. Allowing them here invites the by-hand runs the docs forbid.",
+    "_deny_note": "Read + Edit is the complete pair (Edit covers every file-editing tool). settings.local.json is denied for reading because it is loaded as config — anything in it is quotable; credentials belong in _secrets/. The approval markers are minted only by scripts/approve.py, never written by a tool.",
+    "deny": [
+      "Read(./_secrets/**)",
+      "Edit(./_secrets/**)",
+      "Read(./.claude/settings.local.json)",
+      "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Read(./**/.env.development)",
+      "Read(./**/.env.production)",
+      "Edit(./.claude/.approve-*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-git.py"
+            ],
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-secrets.py"
+            ],
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion|ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/notify.py"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/notify.py"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/notify.py"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

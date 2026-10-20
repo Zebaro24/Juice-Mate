@@ -1,0 +1,148 @@
+{
+  "template": {
+    "version": "1.0.2",
+    "profile": "solo",
+    "addons": [
+      "docs-as-spec",
+      "arch-lint",
+      "docs-lint"
+    ],
+    "overrides": []
+  },
+  "project": {
+    "name": "Juice-Mate",
+    "description": "Windows tray app: battery of Bluetooth/HID devices and Claude usage limits, with self-updating installer",
+    "owner_language": "Russian",
+    "ui_language": null
+  },
+  "git": {
+    "main_branch": "main",
+    "protected_branches": [],
+    "release_tag_pattern": "^v\\d+\\.\\d+\\.\\d+"
+  },
+  "approval": {
+    "ttl_minutes": 15,
+    "consume": true,
+    "bind_head": true
+  },
+  "attribution": {
+    "forbid": true,
+    "extra_words": []
+  },
+  "notify": {
+    "windows": true,
+    "telegram": false,
+    "telegram_delete_after": 15
+  },
+  "gate": {
+    "base_ref": "origin/main",
+    "targets": {
+      "app": {
+        "dir": "src",
+        "checks": [
+          {
+            "name": "ruff",
+            "kind": "lint",
+            "cwd": ".",
+            "cmd": [
+              "poetry",
+              "run",
+              "ruff",
+              "check",
+              "."
+            ]
+          },
+          {
+            "name": "ruff-format",
+            "kind": "lint",
+            "cwd": ".",
+            "cmd": [
+              "poetry",
+              "run",
+              "ruff",
+              "format",
+              "--check",
+              "."
+            ]
+          },
+          {
+            "name": "mypy",
+            "kind": "lint",
+            "cwd": ".",
+            "cmd": [
+              "poetry",
+              "run",
+              "mypy",
+              "src",
+              "tests"
+            ]
+          },
+          {
+            "name": "pytest",
+            "kind": "test",
+            "cwd": ".",
+            "cmd": [
+              "poetry",
+              "run",
+              "pytest",
+              "-q"
+            ],
+            "args_ok": true
+          },
+          {
+            "name": "audit",
+            "kind": "lint",
+            "cwd": ".",
+            "cmd": [
+              "poetry",
+              "run",
+              "pip-audit"
+            ],
+            "strict": true
+          },
+          {
+            "name": "arch",
+            "kind": "lint",
+            "cwd": ".",
+            "cmd": [
+              "python",
+              "scripts/arch_lint.py"
+            ]
+          }
+        ]
+      },
+      "docs": {
+        "dir": "docs",
+        "checks": [
+          {
+            "name": "docs-lint",
+            "kind": "lint",
+            "cwd": ".",
+            "cmd": [
+              "python",
+              "scripts/docs_lint.py"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "arch_lint": [
+    {
+      "name": "core is pure",
+      "files": [
+        "src/juice_mate/core/**/*.py"
+      ],
+      "forbid": "^\\s*(from|import)\\s+(juice_mate\\.(sources|tray|update)|pystray|PIL|hid|httpx|winrt|ctypes|velopack)\\b",
+      "why": "core holds pure logic only; IO lives in sources/, tray/, update/"
+    },
+    {
+      "name": "sources do not draw",
+      "files": [
+        "src/juice_mate/sources/**/*.py"
+      ],
+      "forbid": "^\\s*(from|import)\\s+(juice_mate\\.tray|pystray|PIL)\\b",
+      "why": "a source returns readings; the tray decides how they look"
+    }
+  ]
+}
