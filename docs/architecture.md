@@ -85,7 +85,13 @@ A failing source returns an error reading, never raises into the poll loop.
 - `vpk` is a .NET tool — needed only in CI (`windows-latest`), never on the user's PC.
 - **No console window, ever**: PyInstaller builds with `--windowed`; in development the app runs
   under `pythonw.exe`. Then `sys.stdout` / `sys.stderr` are `None` — code must not assume them.
-- The app must call `velopack.App().run()` first thing in `main` (install/update hooks).
+- The app calls `velopack.App().run()` first thing in `main`, before argparse (Velopack runs the exe
+  with its own hook arguments); the first run after install switches autostart on.
+- Build: `poetry run python scripts/build.py` → `dist/JuiceMate/` (~42 MB, ~62 MB RAM running).
+  CI: `.github/workflows/ci.yml` runs the strict gate on every push to main;
+  `.github/workflows/release.yml` on a `vX.Y.Z` tag checks the tag against `VERSION`, builds,
+  `vpk download` (deltas) → `vpk pack` → `vpk upload github --publish`.
+- A frozen build run from `dist/` (not installed) logs once and skips self-update.
 
 ### 4.1 Where updates are downloaded from — LOCKED (owner, 2026-10-20)
 

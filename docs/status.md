@@ -87,3 +87,12 @@ right-aligned numbers in a fixed slot, group spacing instead of dividers, `!` in
 The usage source went to one request per three minutes after the endpoint answered 429, and keeps
 its last numbers through passing failures. Seen: the panel hides with the taskbar in a full-screen
 app.
+
+## Step 07 — packaging and self-update (2026-10-21)
+
+`scripts/build.py` draws the app icon and builds `dist/JuiceMate/JuiceMate.exe` with PyInstaller
+`--windowed`; run on the owner's PC it attached the panel and read every source (62 MB RAM).
+`update/updater.py`: Velopack hooks at start, autostart on first run, a check every 6 h against this
+repo's GitHub Releases, download in the background, "Restart to update to X" in the panel menu, else
+applied on the next start. CI and release workflows in `.github/workflows/`. ⚠️ Setup.exe and an
+actual update are seen only once the first two releases exist.

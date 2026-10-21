@@ -17,7 +17,7 @@ Ordered by dependency. ✅ done · ⚠️ written, not verified on the real targ
 | 04 | Hator source (§3.2): HID feature report, smoothing, charging via PID 5B49 | ✅ · ⚠️ charging (cable) and mouse-off not yet seen on the real mouse |
 | 05 | Claude source (§3.3): confirm the usage endpoint, read-only token, 5 h + weekly item | ✅ |
 | 06 | Thresholds and toasts (§6), autostart toggle | ✅ · ⚠️ a real low-battery toast not seen yet (rule covered by tests, toast shown once by hand) |
-| 07 | Packaging and self-update (§4): PyInstaller `--windowed` + Velopack, CI release on tag, GitHub source | |
+| 07 | Packaging and self-update (§4): PyInstaller `--windowed` + Velopack, CI release on tag, GitHub source | ✅ · ⚠️ install and a real update from v0.1.0 → v0.1.1 not yet seen |
 | 08 | System sensors on the panel — the ones the owner picks; then uninstall TrafficMonitor | |
 | 09 | Install on both PCs, uninstall Hator Hub and Frida | |
 

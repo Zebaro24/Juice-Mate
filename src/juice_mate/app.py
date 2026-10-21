@@ -97,8 +97,10 @@ def run(sources: list[Source]) -> None:
     from juice_mate.panel.window import MenuEntry, Panel
     from juice_mate.tray.toasts import Toasts
     from juice_mate.update import autostart
+    from juice_mate.update.updater import Updater
 
     stop, wake = threading.Event(), threading.Event()
+    updater = Updater()
 
     def quit_app() -> None:
         stop.set()
@@ -111,7 +113,10 @@ def run(sources: list[Source]) -> None:
             log.exception("could not change autostart")
 
     def menu() -> list[MenuEntry | None]:
+        ready = updater.ready
+        update = [MenuEntry(f"Restart to update to {ready}", updater.restart_now), None] if ready else []
         return [
+            *update,
             MenuEntry("Refresh now", wake.set),
             MenuEntry("Start with Windows", toggle_autostart, checked=autostart.is_enabled()),
             None,
@@ -126,6 +131,7 @@ def run(sources: list[Source]) -> None:
         TrayIcons(sources).run()
         return
     log.info("panel attached")
+    updater.start()
     alerts, toasts = Alerts(), Toasts()
     while not stop.is_set():
         readings = poll_all(sources)
@@ -134,11 +140,16 @@ def run(sources: list[Source]) -> None:
             toasts.show(alert)
         wake.wait(POLL_SECONDS)
         wake.clear()
+    updater.stop()
     panel.stop()
     log.info("quit")
 
 
 def main() -> None:
+    from juice_mate.update.updater import startup
+
+    # First, before argparse: Velopack runs the exe with its own hook arguments and expects it to exit.
+    startup()
     parser = argparse.ArgumentParser(prog="juice_mate")
     parser.add_argument("--dump", action="store_true", help="print every reading once and exit")
     args = parser.parse_args()

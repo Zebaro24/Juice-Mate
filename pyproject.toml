@@ -22,6 +22,8 @@ hidapi = "^0.15.0"
 httpx = "^0.28.1"
 # --- Windows notifications (low battery) ---
 windows-toasts = "^1.3.1"
+# --- Self-update from GitHub Releases ---
+velopack = "^1.2.161"
 
 # ───────────────────────────────────────────────────────────────────────────
 # Development dependencies
@@ -32,6 +34,8 @@ mypy = "^2.4.0"
 pytest = "^9.1.1"
 pip-audit = "^2.10.1"
 types-psutil = "^7.2.2.20260906"
+# --- Build: the windowed exe that Velopack packs (scripts/build.py) ---
+pyinstaller = "^6.22.3"
 
 [build-system]
 requires = ["poetry-core"]
