@@ -45,6 +45,32 @@ def parse(answer: Any) -> list[Window]:
     return windows
 
 
+PACE_WINDOW = timedelta(minutes=60)  # recent samples only: this hour's pace, not this morning's
+PACE_MIN_SPAN = timedelta(minutes=10)  # less than this and two samples are noise, not a pace
+
+
+def limit_at(samples: list[tuple[datetime, float]], window: Window, now: datetime) -> datetime | None:
+    """When the window runs out at the recent pace — only if that is before it resets.
+
+    `samples` are (time, % used) of this window, oldest first. The pace is the straight line from the
+    oldest recent sample to the newest; a flat or falling line means no forecast.
+    """
+    recent = [(t, used) for t, used in samples if now - t <= PACE_WINDOW]
+    if len(recent) < 2:
+        return None
+    (t0, u0), (t1, u1) = recent[0], recent[-1]
+    span = t1 - t0
+    if span < PACE_MIN_SPAN or u1 <= u0:
+        return None
+    per_second = (u1 - u0) / span.total_seconds()
+    eta = t1 + timedelta(seconds=(100.0 - window.used) / per_second)
+    if eta <= now:
+        return None  # anchored at an old sample while fetches fail: a time already past says nothing
+    if window.resets_at is not None and eta >= window.resets_at:
+        return None
+    return eta
+
+
 def until(moment: datetime, now: datetime) -> str:
     """`2 h 05 min`, `40 min`, `3 d 4 h` — how long until a reset."""
     left = max(moment - now, timedelta(0))

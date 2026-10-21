@@ -18,11 +18,11 @@ Ordered by dependency. ✅ done · ⚠️ written, not verified on the real targ
 | 05 | Claude source (§3.3): confirm the usage endpoint, read-only token, 5 h + weekly item | ✅ |
 | 06 | Thresholds and toasts (§6), autostart toggle | ✅ · ⚠️ a real low-battery toast not seen yet (rule covered by tests, toast shown once by hand) |
 | 07 | Packaging and self-update (§4): PyInstaller `--windowed` + Velopack, CI release on tag, GitHub source | ✅ · ⚠️ install and a real update from v0.1.0 → v0.1.1 not yet seen |
-| 08 | System sensors on the panel — the ones the owner picks; then uninstall TrafficMonitor | |
+| 08 | System sensors on the panel with a Show menu; usage pace forecast and alerts; click-to-open; then the owner uninstalls TrafficMonitor | ✅ · ⚠️ TrafficMonitor still installed (owner's call) |
 | 09 | Install on both PCs, uninstall Hator Hub and Frida | |
 
 Later (not v0.1): popover window with all readings and reset timers; laptop battery; Android phone
-via ADB; usage pace forecast; per-day traffic history. Source ideas: the Bento note "Tray app —
+via ADB; per-day traffic history. Source ideas: the Bento note "Tray app —
 ideas, names, analysis".
 
 Every step: **Read** docs/architecture.md (the § named) · **Done when** `python scripts/gate.py` is

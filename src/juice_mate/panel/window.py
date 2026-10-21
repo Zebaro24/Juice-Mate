@@ -30,11 +30,12 @@ _MARGIN = 8  # gap between the panel and the notification area, at 96 DPI
 
 @dataclass(frozen=True)
 class MenuEntry:
-    """One right-click menu line; `None` in the list is a separator."""
+    """One right-click menu line; `None` in the list is a separator. With `children` it is a submenu."""
 
     label: str
-    action: Callable[[], None]
+    action: Callable[[], None] | None = None
     checked: bool = False
+    children: "list[MenuEntry | None] | None" = None
 
 
 def _light_theme() -> bool:
@@ -46,12 +47,17 @@ def _light_theme() -> bool:
 
 
 class Panel:
-    def __init__(self, menu: Callable[[], list[MenuEntry | None]]) -> None:
+    def __init__(
+        self, menu: Callable[[], list[MenuEntry | None]], on_click: Callable[[str], None] = lambda _key: None
+    ) -> None:
         """`menu` is asked for the entries each time the menu opens, so a checkmark is always current.
+        `on_click` gets the key of the item under a left click.
 
-        The actions run on the panel thread: they must return at once (set an event, flip a setting).
+        Both run on the panel thread: they must return at once (set an event, flip a setting, start a
+        thread).
         """
         self._menu_entries = menu
+        self._on_click = on_click
         self._lock = threading.Lock()
         self._items: list[Item] = []
         self._attached = threading.Event()
@@ -249,25 +255,40 @@ class Panel:
         if self._anchor != (api.rect(taskbar), right, scale, self._light):
             self._paint()
 
-    def _menu(self) -> None:
-        entries = self._menu_entries()
-        menu = api.user32.CreatePopupMenu()
-        for command_id, entry in enumerate(entries, start=1):
+    def _build(self, entries: list[MenuEntry | None], actions: list[Callable[[], None]]) -> int:
+        """A Win32 menu for `entries`; every action gets the command id `index + 1` in `actions`."""
+        menu: int = api.user32.CreatePopupMenu()
+        for entry in entries:
             if entry is None:
                 api.user32.AppendMenuW(menu, api.MF_SEPARATOR, 0, None)
+            elif entry.children is not None:
+                submenu = self._build(entry.children, actions)
+                api.user32.AppendMenuW(menu, api.MF_STRING | api.MF_POPUP, submenu, entry.label)
             else:
                 flags = api.MF_STRING | (api.MF_CHECKED if entry.checked else 0)
-                api.user32.AppendMenuW(menu, flags, command_id, entry.label)
+                actions.append(entry.action or (lambda: None))
+                api.user32.AppendMenuW(menu, flags, len(actions), entry.label)
+        return menu
+
+    def _menu(self) -> None:
+        actions: list[Callable[[], None]] = []
+        menu = self._build(self._menu_entries(), actions)
         point = w.POINT()
         api.user32.GetCursorPos(ctypes.byref(point))
         api.user32.SetForegroundWindow(self._control)
         flags = api.TPM_RETURNCMD | api.TPM_RIGHTBUTTON | api.TPM_BOTTOMALIGN
         command = api.user32.TrackPopupMenu(menu, flags, point.x, point.y, 0, self._control, None)
-        api.user32.DestroyMenu(menu)
-        if 1 <= command <= len(entries):
-            chosen = entries[command - 1]
-            if chosen is not None:
-                chosen.action()
+        api.user32.DestroyMenu(menu)  # destroys the submenus with it
+        if 1 <= command <= len(actions):
+            actions[command - 1]()
+
+    def _click(self, lparam: int) -> None:
+        x = ctypes.c_short(lparam & 0xFFFF).value
+        y = ctypes.c_short((lparam >> 16) & 0xFFFF).value
+        for span in self._spans:
+            if span.left <= x < span.right and span.top <= y < span.bottom:
+                self._on_click(span.key)
+                return
 
     def _wndproc(self, hwnd: int, msg: int, wparam: int, lparam: int) -> int:
         try:
@@ -294,6 +315,9 @@ class Panel:
             elif hwnd == self._panel:
                 if msg == api.WM_RBUTTONUP:
                     self._menu()
+                    return 0
+                if msg == api.WM_LBUTTONUP:
+                    self._click(lparam)
                     return 0
                 if msg == api.WM_DESTROY:
                     self._panel = None

@@ -1,6 +1,7 @@
 """One reading from one source, and the level the panel shows for it (docs/architecture.md §3, §6)."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 
 LOW_PERCENT = 20
@@ -41,6 +42,7 @@ class Reading:
     kind: Kind = Kind.OTHER
     note: str | None = None  # replaces the default state text in the tooltip
     tag: str | None = None  # a short label drawn before the number ("5h", "7d")
+    limit_at: datetime | None = None  # usage only: when the window runs out at the current pace
 
 
 def level(reading: Reading, low: int = LOW_PERCENT) -> Level:

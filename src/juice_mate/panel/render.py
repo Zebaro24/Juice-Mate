@@ -7,6 +7,7 @@ each item's rectangle, so the window knows which item the mouse is over.
 import contextlib
 from dataclasses import dataclass
 from functools import cache
+from itertools import groupby
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
@@ -130,13 +131,15 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
     glyph_px, bolt_px = round(GLYPH_PX * scale), round(BOLT_PX * scale)
     text_font = _font(_TEXT_FONTS, round(TEXT_PX * scale))
     gap_inner, pad = round(GAP_INNER * scale), round(PAD * scale)
-    two_digits = _width(text_font, "00%")  # Segoe digits are tabular: any two-digit value fits exactly
     # The baseline that centres a digit's ink on the row (digits have no descenders).
     _left, digit_top, _right, digit_bottom = text_font.getbbox("0", anchor="ls")
     to_baseline = (digit_bottom - digit_top) / 2
 
+    def glyph_size(it: Item) -> int:
+        return round(glyph_px * it.glyph_scale)
+
     def glyph_width(it: Item) -> int:
-        return _glyph_mask(it.glyph, glyph_px).width - 4
+        return _glyph_mask(it.glyph, glyph_size(it)).width - 4
 
     def prefix_width(it: Item) -> int:
         if it.tag:
@@ -145,12 +148,18 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
             return _glyph_mask(BOLT, bolt_px).width - 4 + gap_inner
         return 0
 
-    columns = [items[i : i + 2] for i in range(0, len(items), 2)]
+    # Columns are cut inside each group: an odd number of devices must not push ↓ away from ↑.
+    columns = [
+        group_items[i : i + 2]
+        for _group, members in groupby(items, key=lambda it: it.group)
+        for group_items in [list(members)]
+        for i in range(0, len(group_items), 2)
+    ]
     layout = []
     for column in columns:
         glyph_slot = max(glyph_width(it) for it in column)
         prefix_slot = max(prefix_width(it) for it in column)
-        slot = max([two_digits] + [_width(text_font, it.text) for it in column])
+        slot = max([_width(text_font, it.reserve) for it in column] + [_width(text_font, it.text) for it in column])
         layout.append((column, glyph_slot, prefix_slot, slot, glyph_slot + gap_inner + prefix_slot + slot))
     gaps = [
         round((GAP_GROUP if left[0][-1].group != right[0][0].group else GAP_COLUMN) * scale)
@@ -168,7 +177,7 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
         for row, (it, mid) in enumerate(zip(column, rows, strict=False)):
             colour = theme.critical if it.tone is Tone.CRITICAL else theme.text
             fill = (*colour, theme.dim_alpha if it.tone is Tone.DIM else 255)
-            _paste_glyph(image, it.glyph, glyph_px, x + (glyph_slot - glyph_width(it)) / 2, mid, fill)
+            _paste_glyph(image, it.glyph, glyph_size(it), x + (glyph_slot - glyph_width(it)) / 2, mid, fill)
             cursor = x + glyph_slot + gap_inner
             if it.tag:
                 tag_fill = (*colour, min(fill[3], TAG_ALPHA))

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from juice_mate.core.metric import Metric, Unit, short
 from juice_mate.core.reading import Kind, Level, Reading, level
 
 GLYPHS: dict[Kind, str] = {
@@ -41,6 +42,8 @@ class Item:
     tag: str  # "" or a short label before the number
     group: str  # items of one group sit closer together than items of different groups
     tooltip: str
+    reserve: str = "00%"  # the widest ordinary value: the number slot never narrows below it
+    glyph_scale: float = 1.0  # tall glyphs (arrows) shrink so two rows do not touch
 
 
 def tooltip(reading: Reading, now: datetime) -> str:
@@ -72,6 +75,53 @@ def item(reading: Reading, now: datetime) -> Item:
         tag=reading.tag or "",
         group="usage" if reading.kind is Kind.CLAUDE else "devices",
         tooltip=tooltip(reading, now),
+    )
+
+
+# System sensors (docs/architecture.md §4a). Code points written with chr(): editors and tools have
+# turned literal Private Use Area characters into invisible ones before.
+SENSOR_GLYPHS: dict[str, str] = {
+    "net.up": chr(0xE74A),  # Up
+    "net.down": chr(0xE74B),  # Down
+    "cpu": chr(0xE950),  # Component: a chip
+    "gpu": chr(0xE964),  # a graphics card
+    "gpu.temperature": chr(0xE9CA),  # Thermometer
+    "memory": chr(0xEEA1),  # a memory chip
+    "disk": chr(0xEDA2),  # a drive
+}
+HOT_CELSIUS = 85
+BUSY_PERCENT = 95
+
+
+def _sensor_glyph(sensor: str) -> str:
+    # The longest matching prefix: "gpu.temperature" must not stop at "gpu".
+    for prefix in sorted(SENSOR_GLYPHS, key=len, reverse=True):
+        if sensor == prefix or sensor.startswith(prefix + "."):
+            return SENSOR_GLYPHS[prefix]
+    return SENSOR_GLYPHS["cpu"]
+
+
+def metric_item(metric: Metric, now: datetime) -> Item:
+    """A sensor as a panel item: its glyph and a short value — `1.2M`, `37%`, `52°`."""
+    value = metric.value
+    hot = value is not None and (
+        (metric.unit is Unit.CELSIUS and value >= HOT_CELSIUS)
+        or (metric.unit is Unit.PERCENT and value >= BUSY_PERCENT)
+    )
+    text = short(metric) + ("%" if metric.unit is Unit.PERCENT and value is not None else "")
+    state = metric.error or f"{text}{'/s' if metric.unit is Unit.BYTES_PER_SECOND else ''}"
+    return Item(
+        key=f"system:{metric.sensor}",
+        glyph=_sensor_glyph(metric.sensor),
+        text=UNAVAILABLE if value is None else text,
+        tone=Tone.DIM if value is None else Tone.CRITICAL if hot else Tone.NORMAL,
+        charging=False,
+        tag="",
+        group="system",
+        tooltip=f"{metric.name} — {state} · {now:%H:%M}"[:127],
+        reserve={Unit.BYTES_PER_SECOND: "000K", Unit.CELSIUS: "00°"}.get(metric.unit, "00%"),
+        # The arrows fill the whole em box; at full size the two rows merge into one "↕".
+        glyph_scale=0.7 if metric.sensor.startswith("net.") else 1.0,
     )
 
 

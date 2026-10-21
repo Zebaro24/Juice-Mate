@@ -96,3 +96,12 @@ app.
 repo's GitHub Releases, download in the background, "Restart to update to X" in the panel menu, else
 applied on the next start. CI and release workflows in `.github/workflows/`. ⚠️ Setup.exe and an
 actual update are seen only once the first two releases exist.
+
+## v0.1.0 released, then step 08 (2026-10-21)
+
+v0.1.0: the release workflow built, packed and published `JuiceMate-win-Setup.exe` (34 MB), the full
+package, a portable zip and `releases.win.json` to GitHub Releases.
+
+Step 08: system sensors on the panel (2 s refresh, a Show submenu with checkmarks, settings.json),
+the usage pace forecast with its toasts, and left-click targets. Rendered with live data on the
+owner's PC: `✳ 5h 29% / 7d 60% · 🖱 86% / 🎧 80% · ↑ 16K / ↓ 2K · CPU 28% / GPU 41% · 83°`.

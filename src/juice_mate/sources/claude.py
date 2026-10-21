@@ -18,13 +18,14 @@ from pathlib import Path
 import httpx
 
 from juice_mate.core.reading import Kind, Reading
-from juice_mate.core.usage import UsageFormatError, Window, parse, summary
+from juice_mate.core.usage import UsageFormatError, Window, limit_at, parse, summary
 
 SOURCE = "claude"
 URL = "https://api.anthropic.com/api/oauth/usage"
 BETA = "oauth-2025-04-20"
 INTERVAL = 180.0  # seconds between requests, however often the app polls
 BACKOFF_FIRST, BACKOFF_MAX = 300.0, 1800.0  # after a 429: 5 min, doubling up to 30 min
+NEW_WINDOW_DROP = 5.0  # % used falling by this much is a reset, not rounding
 STALE_AFTER = 3600.0  # the last good numbers stay on the panel, marked, for up to an hour of failures
 CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
 NAME = "Claude"
@@ -51,6 +52,8 @@ class Claude:
         self._good_at: float | None = None
         self._failure: str | None = None
         self._absent = False  # no Claude Code login on this PC
+        self._history: dict[str, list[tuple[datetime, float]]] = {}  # per window: (time, % used)
+        self._history_resets: dict[str, datetime | None] = {}  # the reset time the history belongs to
 
     def poll(self) -> list[Reading]:
         now = self._clock()
@@ -69,19 +72,38 @@ class Claude:
         if self._failure and self._good_at is not None:
             suffix = f" · as of {datetime.fromtimestamp(self._good_at):%H:%M} ({self._failure})"
         now_utc = datetime.fromtimestamp(now, UTC)
+        readings = []
         # One item per window: the 5-hour session and the week stop you independently.
-        return [
-            Reading(
-                SOURCE,
-                w.key,
-                f"{NAME} {w.label}",
-                round(w.used),
-                kind=Kind.CLAUDE,
-                tag=w.tag,
-                note=summary([w], now_utc) + suffix,
+        for w in self._windows:
+            forecast = limit_at(self._history.get(w.key, []), w, now_utc)
+            eta = forecast.astimezone() if forecast else None  # local time, for the tooltip and the toast
+            pace = f" · at this pace: limit at {eta:%H:%M}" if eta else ""
+            readings.append(
+                Reading(
+                    SOURCE,
+                    w.key,
+                    f"{NAME} {w.label}",
+                    round(w.used),
+                    kind=Kind.CLAUDE,
+                    tag=w.tag,
+                    note=summary([w], now_utc) + pace + suffix,
+                    limit_at=eta,
+                )
             )
-            for w in self._windows
-        ]
+        return readings
+
+    def _remember(self, now: float) -> None:
+        """Keep each window's recent samples. A new window — its reset time moved, or usage fell by more
+        than rounding — starts afresh; a small dip is not a reset and keeps the hour of history."""
+        moment = datetime.fromtimestamp(now, UTC)
+        for w in self._windows:
+            samples = self._history.setdefault(w.key, [])
+            moved = self._history_resets.get(w.key, w.resets_at) != w.resets_at
+            if samples and (moved or samples[-1][1] - w.used >= NEW_WINDOW_DROP):
+                samples.clear()
+            self._history_resets[w.key] = w.resets_at
+            samples.append((moment, w.used))
+            del samples[:-40]  # an hour at one sample per three minutes is 20; keep a margin
 
     def _token(self, now: float) -> str | None:
         """The access token, or None if there is no Claude Code login on this PC at all."""
@@ -125,3 +147,4 @@ class Claude:
             self._failure = f"{type(e).__name__}: {e}"[:80]
             return
         self._good_at, self._failure, self._backoff = now, None, BACKOFF_FIRST
+        self._remember(now)

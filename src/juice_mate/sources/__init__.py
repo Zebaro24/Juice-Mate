@@ -14,7 +14,10 @@ class Source(Protocol):
 
 
 class Sensor(Protocol):
-    """One system value."""
+    """One system value. `sensor` is its stable id (settings, item keys), `name` its menu label."""
+
+    sensor: str
+    name: str
 
     def read(self) -> Metric: ...
 

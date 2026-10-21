@@ -16,9 +16,9 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from juice_mate.core.alerts import Alerts
-from juice_mate.core.display import items
+from juice_mate.core.display import items, metric_item
 from juice_mate.core.metric import Unit, short
-from juice_mate.core.reading import level
+from juice_mate.core.reading import Reading, level
 from juice_mate.sources import Sensor, Source, poll_all
 from juice_mate.sources.bluetooth import Bluetooth
 from juice_mate.sources.claude import Claude
@@ -35,8 +35,17 @@ from juice_mate.sources.system import (
 
 log = logging.getLogger("juice_mate")
 
-POLL_SECONDS = 30
+TICK_SECONDS = 2  # system sensors, like TrafficMonitor's one-second-ish refresh
+BATTERY_SECONDS = 30  # batteries move slowly; Bluetooth enumeration is not free
 _ERROR_ALREADY_EXISTS = 183
+
+# Where a left click on an item takes you, by the item key's source.
+CLICK_TARGETS = {
+    "claude": "https://claude.ai/settings/usage",
+    "bluetooth": "ms-settings:bluetooth",
+    "hator": "ms-settings:bluetooth",
+    "system": "taskmgr",
+}
 
 
 def battery_sources() -> list[Source]:
@@ -44,18 +53,33 @@ def battery_sources() -> list[Source]:
 
 
 def sensors() -> list[Sensor]:
-    """Every sensor there is. Which ones the panel shows is decided at step 08."""
+    """Every sensor there is, in menu order; settings.sensors picks the ones on the panel."""
     return [
         NetworkSpeed("up"),
         NetworkSpeed("down"),
         CpuLoad(),
-        MemoryLoad(),
         GpuLoad(),
         GpuTemperature(),
+        MemoryLoad(),
         DiskUsage("C:\\"),
         DiskSpeed("read"),
         DiskSpeed("write"),
     ]
+
+
+def open_target(key: str) -> None:
+    """Open what belongs to a clicked item, off the panel thread: ShellExecute may take a moment."""
+    target = CLICK_TARGETS.get(key.split(":", 1)[0])
+    if target is None:
+        return
+
+    def go() -> None:
+        try:
+            os.startfile(target)  # noqa: S606 — fixed targets from the table above, no user input
+        except OSError:
+            log.exception("could not open %s", target)
+
+    threading.Thread(target=go, name="open", daemon=True).start()
 
 
 def dump() -> None:
@@ -95,12 +119,15 @@ def _first_instance() -> bool:
 
 def run(sources: list[Source]) -> None:
     from juice_mate.panel.window import MenuEntry, Panel
+    from juice_mate.settings import Settings
     from juice_mate.tray.toasts import Toasts
     from juice_mate.update import autostart
     from juice_mate.update.updater import Updater
 
-    stop, wake = threading.Event(), threading.Event()
+    stop, wake, refresh = threading.Event(), threading.Event(), threading.Event()
     updater = Updater()
+    settings = Settings.load()
+    catalog = sensors()
 
     def quit_app() -> None:
         stop.set()
@@ -112,18 +139,32 @@ def run(sources: list[Source]) -> None:
         except OSError:
             log.exception("could not change autostart")
 
+    def refresh_now() -> None:
+        refresh.set()
+        wake.set()
+
+    def toggle_sensor(sensor: str) -> None:
+        settings.toggle_sensor(sensor)
+        settings.save()
+        wake.set()
+
     def menu() -> list[MenuEntry | None]:
         ready = updater.ready
         update = [MenuEntry(f"Restart to update to {ready}", updater.restart_now), None] if ready else []
+        shown: list[MenuEntry | None] = [
+            MenuEntry(s.name, lambda s=s: toggle_sensor(s.sensor), checked=s.sensor in settings.sensors)  # type: ignore[misc]
+            for s in catalog
+        ]
         return [
             *update,
-            MenuEntry("Refresh now", wake.set),
+            MenuEntry("Show", children=shown),
+            MenuEntry("Refresh now", refresh_now),
             MenuEntry("Start with Windows", toggle_autostart, checked=autostart.is_enabled()),
             None,
             MenuEntry("Quit Juice-Mate", quit_app),
         ]
 
-    panel = Panel(menu)
+    panel = Panel(menu, on_click=open_target)
     if not panel.start():
         log.warning("the taskbar panel could not attach; falling back to tray icons")
         from juice_mate.tray.icons import TrayIcons
@@ -133,12 +174,20 @@ def run(sources: list[Source]) -> None:
     log.info("panel attached")
     updater.start()
     alerts, toasts = Alerts(), Toasts()
+    readings: list[Reading] = []
+    batteries_due = 0.0
     while not stop.is_set():
-        readings = poll_all(sources)
-        panel.show(items(readings, datetime.now()))
-        for alert in alerts.check(readings):
-            toasts.show(alert)
-        wake.wait(POLL_SECONDS)
+        now = time.monotonic()
+        if now >= batteries_due or refresh.is_set():
+            refresh.clear()
+            readings = poll_all(sources)
+            batteries_due = now + BATTERY_SECONDS
+            for alert in alerts.check(readings):
+                toasts.show(alert)
+        moment = datetime.now()
+        shown = [metric_item(s.read(), moment) for s in catalog if s.sensor in settings.sensors]
+        panel.show(items(readings, moment) + shown)
+        wake.wait(TICK_SECONDS)
         wake.clear()
     updater.stop()
     panel.stop()

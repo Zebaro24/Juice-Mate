@@ -122,6 +122,12 @@ decides later — the classes exist so that choice is configuration, not code.
 | `GpuLoad` | % | PDH counter `\GPU Engine(*engtype_3D)\Utilization Percentage` — what Task Manager shows |
 | `GpuTemperature` | °C | NVML (`nvml.dll`, ships with the NVIDIA driver); no NVIDIA → `error` |
 
+On the panel (2026-10-21): each sensor is an item in the `system` group — ↑/↓ arrows (70 % size, they
+fill the em box), a chip for CPU, a card for GPU, a thermometer, a memory chip, a drive — refreshed
+every 2 s while batteries refresh every 30 s. Right-click → **Show** → a checkmark per sensor; the
+choice lives in `%LOCALAPPDATA%\JuiceMate\settings.json` (`settings.py`, written atomically).
+Default: up, down, CPU, GPU — what TrafficMonitor showed on the owner's taskbar. Red: ≥ 85 °C, ≥ 95 %.
+
 Not read: **CPU temperature** — it needs ring 0, which is exactly what got TrafficMonitor flagged.
 A sensor that cannot read returns a `Metric` with `error`, never raises.
 
@@ -204,3 +210,8 @@ Wi-Fi glyph (16 px), at 96 DPI, scaled with the taskbar's DPI:
 - **Tooltip** on hover: the full name, state, the time of the reading; for usage the window's time
   to reset. Hover areas split each column at the middle.
 - A toast once when a device drops below 15 % (not again until it recovers).
+- **Usage pace** (the Bento note's main idea): from the last hour of samples, when a window runs out
+  at the current pace; shown in the tooltip only if that comes before the reset, with one toast per
+  window. A window that was ≥ 80 % used and resets earns a "limit is back" toast.
+- **Left click** opens what the item belongs to: usage → claude.ai/settings/usage, devices → Windows'
+  Bluetooth settings, sensors → Task Manager.
