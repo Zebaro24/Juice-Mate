@@ -17,7 +17,7 @@ from pathlib import Path
 import httpx
 
 from juice_mate.core.reading import Kind, Reading
-from juice_mate.core.usage import UsageFormatError, parse, summary, worst
+from juice_mate.core.usage import UsageFormatError, parse, summary
 
 SOURCE = "claude"
 URL = "https://api.anthropic.com/api/oauth/usage"
@@ -41,8 +41,8 @@ class Claude:
         self._last: list[Reading] = []
         self._next_request = 0.0
 
-    def _reading(self, percent: int | None = None, note: str | None = None, error: str | None = None) -> Reading:
-        return Reading(SOURCE, SOURCE, NAME, percent, kind=Kind.CLAUDE, note=note, error=error)
+    def _reading(self, error: str) -> Reading:
+        return Reading(SOURCE, SOURCE, NAME, None, kind=Kind.CLAUDE, error=error)
 
     def poll(self) -> list[Reading]:
         now = self._clock()
@@ -87,4 +87,17 @@ class Claude:
             return [self._reading(error=f"the usage answer changed: {e}")]
         except (httpx.HTTPError, OSError, ValueError, KeyError) as e:
             return [self._reading(error=f"{type(e).__name__}: {e}"[:80])]
-        return [self._reading(percent=worst(windows), note=summary(windows, datetime.now(UTC)))]
+        now_utc = datetime.now(UTC)
+        # One item per window: the 5-hour session and the week stop you independently.
+        return [
+            Reading(
+                SOURCE,
+                w.key,
+                f"{NAME} {w.label}",
+                round(w.used),
+                kind=Kind.CLAUDE,
+                tag=w.tag,
+                note=summary([w], now_utc),
+            )
+            for w in windows
+        ]

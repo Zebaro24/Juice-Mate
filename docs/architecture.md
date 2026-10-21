@@ -162,25 +162,30 @@ tests/
 Layering (checked by `scripts/arch_lint.py`): `core` imports nothing from `sources`, `panel`, `tray`,
 `update` or any IO library; `sources` never import `panel` or `tray`.
 
-## 6. Look — the system's own style (owner, 2026-10-20)
+## 6. Look — the system's own style (owner, 2026-10-20 / 21)
 
-Each item on the panel is **a glyph and a number**, nothing else — like the clock and the Wi-Fi /
-volume glyphs next to it:
+**Two rows**, filled column by column, the way TrafficMonitor lays out its numbers. Each item is a
+glyph and a number, nothing else — like the clock and the Wi-Fi / volume glyphs next to it:
 
 ```
- ⌨ 45%   🎧 80%   🖱 ⚡62%   ✳ 37%      (glyphs from Segoe Fluent Icons, not emoji)
+ ✳ 5h 18%   🖱 88%
+ ✳ 7d 55%   🎧 80%        (glyphs from Segoe Fluent Icons, not emoji)
 ```
 
 - **Glyphs** come from the font Windows 11 draws its own icons with, Segoe Fluent Icons (Segoe MDL2
-  Assets on Windows 10): keyboard, headphones, mouse, game controller, phone, a generic Bluetooth
-  glyph when the kind is unknown. The kind comes from the device's Windows category (the same one
-  Settings → Bluetooth uses for its icons), not from the name.
-- **Text** in Segoe UI Variable at the taskbar's size, in the taskbar's text colour (light/dark
-  theme), no background, no boxes — it must look like part of Windows.
-- **Disconnected** → the glyph dimmed with a small "disconnected" mark, no number (the cached % is
-  misleading). Charging → a small bolt before the number. Low (< 20 %) → the number turns red
-  (system red). Unavailable (error) → the glyph dimmed with "!", the reason in the tooltip.
-- **Claude** → the Claude glyph + the larger of the two windows' % used; red from 80 %.
-- **Tooltip** on hover: the full name, state, the time of the reading; for Claude both windows with
-  the time to reset.
+  Assets on Windows 10): keyboard, mouse, headphones, game controller, phone, a generic Bluetooth
+  glyph when the kind is unknown; the usage spark ✳ from Segoe UI Symbol. The kind comes from the
+  device's classes and Bluetooth profiles, not from its name (except game controllers).
+- **Weight**: FreeType draws these glyphs hairline-thin next to the taskbar's own; they are drawn at
+  4×, every stroke grown by a 3×3 max filter, and scaled down — the weight of the volume glyph,
+  with a keyboard's keys still apart. Text gets a gamma lift (0.6) to match the clock.
+- **Text** in Segoe UI Variable, 12 px at 96 DPI, in the taskbar's text colour (light/dark theme),
+  no background, no boxes.
+- **Disconnected devices are not shown at all** — a cached number says nothing (owner, 2026-10-21).
+  Charging → a small bolt before the number. Low (< 20 %) → the number turns red (system red).
+  Unavailable (error) → the glyph dimmed with "!", the reason in the tooltip.
+- **Usage limits** → two items, one per window: ✳ `5h` and ✳ `7d` (small dim tag) + % used; red
+  from 80 %.
+- **Tooltip** on hover: the full name, state, the time of the reading; for usage the window's time
+  to reset. The hover areas split each column at the middle.
 - A toast once when a device drops below 15 % (not again until it recovers).

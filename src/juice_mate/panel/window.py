@@ -155,7 +155,7 @@ class Panel:
         for i, span in enumerate(spans):
             info.uFlags = api.TTF_SUBCLASS
             info.uId = i
-            info.rect = w.RECT(span.left, 0, span.right, height)
+            info.rect = w.RECT(span.left, span.top, span.right, span.bottom)
             text = ctypes.create_unicode_buffer(span.tooltip)
             texts.append(text)  # the tooltip copies the text during the call
             info.lpszText = ctypes.cast(text, w.LPWSTR)

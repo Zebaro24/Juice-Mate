@@ -38,7 +38,7 @@ class Item:
     text: str  # "45%", or "" when there is no number to show
     tone: Tone
     charging: bool
-    struck: bool  # the glyph is crossed out: disconnected
+    tag: str  # "" or a short label before the number
     badge: str  # "" or a small glyph next to the main one (WARNING when unavailable)
     tooltip: str
 
@@ -68,7 +68,7 @@ def item(reading: Reading, now: datetime) -> Item:
         text=f"{reading.percent}%" if has_number else "",
         tone=Tone.CRITICAL if lvl is Level.LOW else Tone.DIM if (offline or unavailable) else Tone.NORMAL,
         charging=lvl is Level.CHARGING,
-        struck=offline,
+        tag=reading.tag or "",
         badge=WARNING if unavailable and not offline else "",
         tooltip=tooltip(reading, now),
     )
@@ -78,6 +78,11 @@ ORDER = [Kind.CLAUDE, Kind.KEYBOARD, Kind.MOUSE, Kind.HEADSET, Kind.GAMEPAD, Kin
 
 
 def items(readings: list[Reading], now: datetime) -> list[Item]:
-    """Stable order on the taskbar: by kind, then name — items do not jump around between polls."""
-    ordered = sorted(readings, key=lambda r: (ORDER.index(r.kind), r.name.lower()))
+    """What the panel shows, in a stable order: by kind, then name — items do not jump around.
+
+    A disconnected device is not shown at all (owner, 2026-10-21): a cached number says nothing, and a
+    crossed-out glyph is clutter. An unavailable source still shows, with its warning badge.
+    """
+    shown = [r for r in readings if level(r) is not Level.OFFLINE]
+    ordered = sorted(shown, key=lambda r: (ORDER.index(r.kind), r.device_id, r.name.lower()))
     return [item(r, now) for r in ordered]

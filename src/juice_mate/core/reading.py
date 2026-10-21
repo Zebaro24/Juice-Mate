@@ -40,6 +40,7 @@ class Reading:
     error: str | None = None
     kind: Kind = Kind.OTHER
     note: str | None = None  # replaces the default state text in the tooltip
+    tag: str | None = None  # a short label drawn before the number ("5h", "7d")
 
 
 def level(reading: Reading, low: int = LOW_PERCENT) -> Level:

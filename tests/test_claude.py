@@ -8,7 +8,7 @@ import pytest
 
 from juice_mate.core.display import Tone, item
 from juice_mate.core.reading import Kind, Level, Reading, level
-from juice_mate.core.usage import UsageFormatError, Window, parse, summary, until, worst
+from juice_mate.core.usage import UsageFormatError, Window, parse, summary, until
 from juice_mate.sources.claude import BETA, URL, Claude
 
 # Trimmed from the real answer of 2026-10-21; the code-named keys are what must be ignored.
@@ -24,8 +24,10 @@ NOW = datetime(2026, 10, 21, 14, 14, 59, tzinfo=UTC)
 
 def test_parse_reads_only_the_two_windows() -> None:
     windows = parse(ANSWER)
-    assert [(w.label, w.used) for w in windows] == [("5 h", 10.0), ("week", 54.0)]
-    assert worst(windows) == 54
+    assert [(w.key, w.label, w.tag, w.used) for w in windows] == [
+        ("five_hour", "5 h", "5h", 10.0),
+        ("seven_day", "week", "7d", 54.0),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -41,7 +43,7 @@ def test_summary_and_until() -> None:
     assert summary(parse(ANSWER), NOW) == "5 h 10% (resets in 2 h 05 min) · week 54% (resets in 5 d 0 h)"
     assert until(datetime(2026, 10, 21, 14, 50, tzinfo=UTC), NOW) == "35 min"
     assert until(datetime(2026, 10, 21, 13, 0, tzinfo=UTC), NOW) == "0 min"
-    assert summary([Window("5 h", 3.0, None)], NOW) == "5 h 3%"
+    assert summary([Window("five_hour", "5 h", "5h", 3.0, None)], NOW) == "5 h 3%"
 
 
 def test_high_usage_is_the_critical_end() -> None:
@@ -76,10 +78,11 @@ def test_reads_usage_with_the_token_and_never_touches_the_file(tmp_path: Path) -
     path = credentials(tmp_path)
     before = path.read_bytes()
     http = Http()
-    [reading] = Claude(path, http, clock=lambda: 1.8e9).poll()
-    assert reading.percent == 54
-    assert reading.note is not None
-    assert "week 54%" in reading.note
+    session, week = Claude(path, http, clock=lambda: 1.8e9).poll()
+    assert (session.device_id, session.tag, session.percent) == ("five_hour", "5h", 10)
+    assert (week.device_id, week.tag, week.percent) == ("seven_day", "7d", 54)
+    assert week.note is not None
+    assert week.note.startswith("week 54%")
     assert http.calls[0]["url"] == URL
     assert http.calls[0]["headers"] == {"Authorization": "Bearer tok", "anthropic-beta": BETA}
     assert path.read_bytes() == before, "the credentials file must never be written"

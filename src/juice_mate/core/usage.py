@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-WINDOWS = {"five_hour": "5 h", "seven_day": "week"}
+WINDOWS = {"five_hour": ("5 h", "5h"), "seven_day": ("week", "7d")}  # key → (tooltip label, panel tag)
 
 
 class UsageFormatError(ValueError):
@@ -17,7 +17,9 @@ class UsageFormatError(ValueError):
 
 @dataclass(frozen=True)
 class Window:
+    key: str
     label: str
+    tag: str
     used: float  # percent of the window's limit already spent
     resets_at: datetime | None
 
@@ -26,7 +28,7 @@ def parse(answer: Any) -> list[Window]:
     if not isinstance(answer, dict):
         raise UsageFormatError(f"expected an object, got {type(answer).__name__}")
     windows = []
-    for key, label in WINDOWS.items():
+    for key, (label, tag) in WINDOWS.items():
         raw = answer.get(key)
         if raw is None:
             continue  # a plan without this window
@@ -37,15 +39,10 @@ def parse(answer: Any) -> list[Window]:
             resets_at = datetime.fromisoformat(resets) if isinstance(resets, str) else None
         except ValueError as e:
             raise UsageFormatError(f"{key}: bad resets_at {resets!r}") from e
-        windows.append(Window(label, float(raw["utilization"]), resets_at))
+        windows.append(Window(key, label, tag, float(raw["utilization"]), resets_at))
     if not windows:
         raise UsageFormatError("neither five_hour nor seven_day in the answer")
     return windows
-
-
-def worst(windows: list[Window]) -> int:
-    """The number on the panel: the window closest to its limit is the one that will stop you."""
-    return round(max(w.used for w in windows))
 
 
 def until(moment: datetime, now: datetime) -> str:

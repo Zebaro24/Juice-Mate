@@ -64,3 +64,8 @@ refreshes it — a test checks the file is byte-identical after a poll) and asks
 most once a minute. Live on the owner's PC: ✳ 55 % on the panel, tooltip "5 h 13% (resets in 20 min) ·
 week 55% (resets in 4 d 23 h)". No credentials file → no item; expired token / 401 → "open Claude
 Code"; 429 → five minutes' pause; a changed answer → "the usage answer changed".
+
+## Panel v2 (2026-10-21, owner's feedback)
+
+Two rows, column by column; disconnected devices hidden; usage as two items (5h / 7d); glyphs drawn
+bolder (4× + 3×3 max filter). Live: `✳ 5h 18% · ✳ 7d 55% | 🖱 88% · 🎧 80%`.

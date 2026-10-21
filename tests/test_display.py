@@ -15,14 +15,20 @@ def reading(**kw: object) -> Reading:
 
 def test_a_connected_device_is_its_glyph_and_percent() -> None:
     it = item(reading(kind=Kind.KEYBOARD), NOW)
-    assert (it.glyph, it.text, it.tone, it.struck, it.badge) == (GLYPHS[Kind.KEYBOARD], "45%", Tone.NORMAL, False, "")
+    assert (it.glyph, it.text, it.tone, it.tag, it.badge) == (GLYPHS[Kind.KEYBOARD], "45%", Tone.NORMAL, "", "")
 
 
-def test_disconnected_is_struck_and_has_no_number() -> None:
-    it = item(reading(connected=False), NOW)
-    assert it.struck
-    assert it.text == ""
-    assert it.tone is Tone.DIM
+def test_disconnected_devices_are_not_shown() -> None:
+    shown = items([reading(device_id="a", connected=False), reading(device_id="b")], NOW)
+    assert [it.key for it in shown] == ["bt:b"]
+
+
+def test_an_unavailable_source_is_still_shown() -> None:
+    assert len(items([reading(percent=None, error="dongle busy")], NOW)) == 1
+
+
+def test_the_tag_is_carried_to_the_item() -> None:
+    assert item(reading(tag="7d"), NOW).tag == "7d"
 
 
 def test_low_is_critical_and_charging_is_not() -> None:
@@ -49,12 +55,16 @@ def test_order_is_by_kind_then_name() -> None:
     assert [it.key for it in items(rs, NOW)] == ["bt:k", "bt:h1", "bt:h2", "bt:p"]
 
 
-def test_render_spans_follow_the_items_left_to_right() -> None:
-    its = items([reading(kind=Kind.KEYBOARD), reading(device_id="m", charging=True, kind=Kind.MOUSE)], NOW)
+def test_render_fills_two_rows_column_by_column() -> None:
+    kinds = [Kind.KEYBOARD, Kind.MOUSE, Kind.HEADSET]
+    its = items([reading(device_id=k.value, kind=k, charging=k is Kind.MOUSE) for k in kinds], NOW)
     image, spans = render(its, 48, Theme.for_taskbar(light=False))
     assert image.size[1] == 48
-    assert [s.key for s in spans] == ["bt:kb", "bt:m"]
-    assert 0 < spans[0].left < spans[0].right < spans[1].left < spans[1].right <= image.width
+    keyboard, mouse, headset = spans
+    assert (keyboard.left, keyboard.top, keyboard.bottom) == (mouse.left, 0, 24), "first column, top row"
+    assert (mouse.top, mouse.bottom) == (24, 48), "first column, bottom row"
+    assert (headset.top, headset.bottom) == (0, 48), "a column of one is centred and takes the full height"
+    assert keyboard.right < headset.left <= headset.right <= image.width
 
 
 def test_background_catches_the_mouse_but_is_invisible() -> None:
