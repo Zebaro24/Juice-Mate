@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.2.0 — 2026-10-21
+
+TrafficMonitor's job, without its flagged driver, plus a forecast for the Claude limits.
+
+- **System monitor on the panel** — upload/download speed, CPU and GPU load, refreshed every two
+  seconds; GPU temperature, memory and disk on request. Right-click → **Show** to pick what is shown;
+  the choice is remembered. No kernel driver, so nothing for an antivirus to flag.
+- **Claude pace** — the tooltip says when you will hit a limit at your current pace, if that comes
+  before the reset, and one notification warns you. When a nearly spent window resets, a
+  notification says the limit is back.
+- **Click to open** — the Claude items open your usage page, devices open Bluetooth settings,
+  sensors open Task Manager.
+- **Steadier numbers** — the layout matches the taskbar clock: same rows, numbers of its size,
+  right-aligned so they do not jump; the 5h / 7d labels at full size.
+- A Claude rate limit no longer hides the numbers: the last ones stay, marked with their time.
+
 ## v0.1.0 — 2026-10-21
 
 The first release: Juice-Mate puts your devices' charge and your Claude limits on the taskbar itself.
