@@ -69,3 +69,12 @@ Code"; 429 → five minutes' pause; a changed answer → "the usage answer chang
 
 Two rows, column by column; disconnected devices hidden; usage as two items (5h / 7d); glyphs drawn
 bolder (4× + 3×3 max filter). Live: `✳ 5h 18% · ✳ 7d 55% | 🖱 88% · 🎧 80%`.
+
+## Step 06 — alerts and autostart (2026-10-21)
+
+`core/alerts.py`: one toast when a device drops below 15 %, re-armed only at 20 % or on the charger.
+`tray/toasts.py` registers the AppUserModelID `Zebaro.JuiceMate` under HKCU so the toast is signed
+"Juice-Mate" (seen on the owner's PC with a test toast). `update/autostart.py`: the HKCU `Run` entry —
+the installed exe, or `pythonw -m juice_mate` from a dev checkout. The panel's right-click menu is
+built from entries each time it opens: Refresh now · Start with Windows (checkmark) · Quit — opened
+on the owner's PC.

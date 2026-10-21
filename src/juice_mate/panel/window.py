@@ -13,6 +13,7 @@ import threading
 import winreg
 from collections.abc import Callable
 from ctypes import wintypes as w
+from dataclasses import dataclass
 
 from juice_mate.core.display import Item
 from juice_mate.panel import win32 as api
@@ -25,7 +26,15 @@ _WM_UPDATE = api.WM_APP + 1
 _WATCHDOG_TIMER = 1
 _WATCHDOG_MS = 2000
 _MARGIN = 8  # gap between the panel and the notification area, at 96 DPI
-_MENU_REFRESH, _MENU_QUIT = 1, 2
+
+
+@dataclass(frozen=True)
+class MenuEntry:
+    """One right-click menu line; `None` in the list is a separator."""
+
+    label: str
+    action: Callable[[], None]
+    checked: bool = False
 
 
 def _light_theme() -> bool:
@@ -37,9 +46,12 @@ def _light_theme() -> bool:
 
 
 class Panel:
-    def __init__(self, on_refresh: Callable[[], None], on_quit: Callable[[], None]) -> None:
-        self._on_refresh = on_refresh
-        self._on_quit = on_quit
+    def __init__(self, menu: Callable[[], list[MenuEntry | None]]) -> None:
+        """`menu` is asked for the entries each time the menu opens, so a checkmark is always current.
+
+        The actions run on the panel thread: they must return at once (set an event, flip a setting).
+        """
+        self._menu_entries = menu
         self._lock = threading.Lock()
         self._items: list[Item] = []
         self._attached = threading.Event()
@@ -238,20 +250,24 @@ class Panel:
             self._paint()
 
     def _menu(self) -> None:
+        entries = self._menu_entries()
         menu = api.user32.CreatePopupMenu()
-        api.user32.AppendMenuW(menu, api.MF_STRING, _MENU_REFRESH, "Refresh now")
-        api.user32.AppendMenuW(menu, api.MF_SEPARATOR, 0, None)
-        api.user32.AppendMenuW(menu, api.MF_STRING, _MENU_QUIT, "Quit Juice-Mate")
+        for command_id, entry in enumerate(entries, start=1):
+            if entry is None:
+                api.user32.AppendMenuW(menu, api.MF_SEPARATOR, 0, None)
+            else:
+                flags = api.MF_STRING | (api.MF_CHECKED if entry.checked else 0)
+                api.user32.AppendMenuW(menu, flags, command_id, entry.label)
         point = w.POINT()
         api.user32.GetCursorPos(ctypes.byref(point))
         api.user32.SetForegroundWindow(self._control)
         flags = api.TPM_RETURNCMD | api.TPM_RIGHTBUTTON | api.TPM_BOTTOMALIGN
         command = api.user32.TrackPopupMenu(menu, flags, point.x, point.y, 0, self._control, None)
         api.user32.DestroyMenu(menu)
-        if command == _MENU_REFRESH:
-            self._on_refresh()
-        elif command == _MENU_QUIT:
-            self._on_quit()
+        if 1 <= command <= len(entries):
+            chosen = entries[command - 1]
+            if chosen is not None:
+                chosen.action()
 
     def _wndproc(self, hwnd: int, msg: int, wparam: int, lparam: int) -> int:
         try:

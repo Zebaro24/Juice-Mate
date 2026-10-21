@@ -15,6 +15,7 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from juice_mate.core.alerts import Alerts
 from juice_mate.core.display import items
 from juice_mate.core.metric import Unit, short
 from juice_mate.core.reading import level
@@ -93,7 +94,9 @@ def _first_instance() -> bool:
 
 
 def run(sources: list[Source]) -> None:
-    from juice_mate.panel.window import Panel
+    from juice_mate.panel.window import MenuEntry, Panel
+    from juice_mate.tray.toasts import Toasts
+    from juice_mate.update import autostart
 
     stop, wake = threading.Event(), threading.Event()
 
@@ -101,7 +104,21 @@ def run(sources: list[Source]) -> None:
         stop.set()
         wake.set()
 
-    panel = Panel(on_refresh=wake.set, on_quit=quit_app)
+    def toggle_autostart() -> None:
+        try:
+            autostart.set_enabled(not autostart.is_enabled())
+        except OSError:
+            log.exception("could not change autostart")
+
+    def menu() -> list[MenuEntry | None]:
+        return [
+            MenuEntry("Refresh now", wake.set),
+            MenuEntry("Start with Windows", toggle_autostart, checked=autostart.is_enabled()),
+            None,
+            MenuEntry("Quit Juice-Mate", quit_app),
+        ]
+
+    panel = Panel(menu)
     if not panel.start():
         log.warning("the taskbar panel could not attach; falling back to tray icons")
         from juice_mate.tray.icons import TrayIcons
@@ -109,8 +126,12 @@ def run(sources: list[Source]) -> None:
         TrayIcons(sources).run()
         return
     log.info("panel attached")
+    alerts, toasts = Alerts(), Toasts()
     while not stop.is_set():
-        panel.show(items(poll_all(sources), datetime.now()))
+        readings = poll_all(sources)
+        panel.show(items(readings, datetime.now()))
+        for alert in alerts.check(readings):
+            toasts.show(alert)
         wake.wait(POLL_SECONDS)
         wake.clear()
     panel.stop()
