@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from juice_mate.core.display import BOLT, GLYPHS, WARNING, Tone, item, items
+from juice_mate.core.display import BOLT, GLYPHS, Tone, item, items
 from juice_mate.core.reading import Kind, Reading
 from juice_mate.panel.render import Theme, premultiplied_bgra, render
 
@@ -15,7 +15,7 @@ def reading(**kw: object) -> Reading:
 
 def test_a_connected_device_is_its_glyph_and_percent() -> None:
     it = item(reading(kind=Kind.KEYBOARD), NOW)
-    assert (it.glyph, it.text, it.tone, it.tag, it.badge) == (GLYPHS[Kind.KEYBOARD], "45%", Tone.NORMAL, "", "")
+    assert (it.glyph, it.text, it.tone, it.tag, it.group) == (GLYPHS[Kind.KEYBOARD], "45%", Tone.NORMAL, "", "devices")
 
 
 def test_disconnected_devices_are_not_shown() -> None:
@@ -38,10 +38,9 @@ def test_low_is_critical_and_charging_is_not() -> None:
     assert charging.charging
 
 
-def test_unavailable_gets_a_warning_badge() -> None:
+def test_unavailable_shows_an_exclamation_mark_dimmed() -> None:
     it = item(reading(percent=None, error="HID read failed"), NOW)
-    assert it.badge == WARNING
-    assert it.text == ""
+    assert (it.text, it.tone) == ("!", Tone.DIM)
     assert "HID read failed" in it.tooltip
 
 

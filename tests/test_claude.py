@@ -115,18 +115,63 @@ def test_failures_become_error_readings(tmp_path: Path, http: Http, fragment: st
     assert fragment in reading.error
 
 
-def test_at_most_one_request_a_minute_and_a_pause_after_429(tmp_path: Path) -> None:
+def test_one_request_per_three_minutes_and_a_growing_pause_after_429(tmp_path: Path) -> None:
     now = [1.8e9]
     http = Http()
     source = Claude(credentials(tmp_path), http, clock=lambda: now[0])
     source.poll()
-    now[0] += 30
+    now[0] += 170
     source.poll()
     assert len(http.calls) == 1
-    now[0] += 31
+    now[0] += 10
     http.status = 429
-    [limited] = source.poll()
-    assert limited.error is not None
-    now[0] += 120
     source.poll()
-    assert len(http.calls) == 2, "no request during the back-off"
+    assert len(http.calls) == 2
+    now[0] += 290  # inside the first 5-minute pause
+    source.poll()
+    assert len(http.calls) == 2
+    now[0] += 10
+    source.poll()  # 429 again → the pause doubles to 10 minutes
+    now[0] += 590
+    source.poll()
+    assert len(http.calls) == 3
+
+
+def test_a_rate_limit_keeps_the_last_numbers_on_the_panel(tmp_path: Path) -> None:
+    # 2026-10-21: after an hour of one request a minute the endpoint answered 429 and the panel lost
+    # both numbers behind a "!" — what it knew was still true.
+    now = [1.8e9]
+    http = Http()
+    source = Claude(credentials(tmp_path), http, clock=lambda: now[0])
+    source.poll()
+    http.status = 429
+    now[0] += 180
+    session, week = source.poll()
+    assert (session.percent, week.percent, week.error) == (10, 54, None)
+    assert week.note is not None
+    assert "as of" in week.note
+    assert "rate limited" in week.note
+
+
+def test_numbers_older_than_an_hour_give_way_to_the_error(tmp_path: Path) -> None:
+    now = [1.8e9]
+    http = Http()
+    source = Claude(credentials(tmp_path), http, clock=lambda: now[0])
+    source.poll()
+    http.error = httpx.ConnectError("offline")
+    now[0] += 3700
+    [reading] = source.poll()
+    assert reading.error is not None
+    assert "ConnectError" in reading.error
+
+
+def test_signing_out_drops_the_old_numbers(tmp_path: Path) -> None:
+    now = [1.8e9]
+    http = Http()
+    source = Claude(credentials(tmp_path), http, clock=lambda: now[0])
+    source.poll()
+    http.status = 401
+    now[0] += 180
+    [reading] = source.poll()
+    assert reading.error is not None
+    assert "open Claude Code" in reading.error

@@ -20,7 +20,7 @@ GLYPHS: dict[Kind, str] = {
     Kind.CLAUDE: "\u2733",  # eight-spoked asterisk, drawn from Segoe UI Symbol: Claude's spark
 }
 BOLT = "\ue945"  # LightningBolt
-WARNING = "\ue7ba"  # Warning
+UNAVAILABLE = "!"  # in place of the number: a badge over a glyph is not a Windows pattern
 
 
 class Tone(StrEnum):
@@ -35,11 +35,11 @@ class Tone(StrEnum):
 class Item:
     key: str
     glyph: str
-    text: str  # "45%", or "" when there is no number to show
+    text: str  # "45%", "!" when unavailable, "" when there is no number
     tone: Tone
     charging: bool
     tag: str  # "" or a short label before the number
-    badge: str  # "" or a small glyph next to the main one (WARNING when unavailable)
+    group: str  # items of one group sit closer together than items of different groups
     tooltip: str
 
 
@@ -62,14 +62,15 @@ def item(reading: Reading, now: datetime) -> Item:
     unavailable = reading.error is not None
     offline = lvl is Level.OFFLINE
     has_number = not offline and not unavailable and reading.percent is not None
+    text = f"{reading.percent}%" if has_number else UNAVAILABLE if unavailable else ""
     return Item(
         key=f"{reading.source}:{reading.device_id}",
         glyph=GLYPHS[reading.kind],
-        text=f"{reading.percent}%" if has_number else "",
+        text=text,
         tone=Tone.CRITICAL if lvl is Level.LOW else Tone.DIM if (offline or unavailable) else Tone.NORMAL,
         charging=lvl is Level.CHARGING,
         tag=reading.tag or "",
-        badge=WARNING if unavailable and not offline else "",
+        group="usage" if reading.kind is Kind.CLAUDE else "devices",
         tooltip=tooltip(reading, now),
     )
 
@@ -81,7 +82,7 @@ def items(readings: list[Reading], now: datetime) -> list[Item]:
     """What the panel shows, in a stable order: by kind, then name — items do not jump around.
 
     A disconnected device is not shown at all (owner, 2026-10-21): a cached number says nothing, and a
-    crossed-out glyph is clutter. An unavailable source still shows, with its warning badge.
+    crossed-out glyph is clutter. An unavailable source still shows, dimmed, with "!" for a number.
     """
     shown = [r for r in readings if level(r) is not Level.OFFLINE]
     ordered = sorted(shown, key=lambda r: (ORDER.index(r.kind), r.device_id, r.name.lower()))

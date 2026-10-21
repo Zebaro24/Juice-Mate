@@ -78,3 +78,12 @@ bolder (4× + 3×3 max filter). Live: `✳ 5h 18% · ✳ 7d 55% | 🖱 88% · �
 the installed exe, or `pythonw -m juice_mate` from a dev checkout. The panel's right-click menu is
 built from entries each time it opens: Refresh now · Start with Windows (checkmark) · Quit — opened
 on the owner's PC.
+
+## Panel v3 (2026-10-21, owner's feedback + design council)
+
+Three reviewers (Windows fidelity, glanceability, layout) measured the panel against the clock:
+numbers 14 px weight 500, glyphs 16 px, tags the number's size, rows on the clock's rows (15/31),
+right-aligned numbers in a fixed slot, group spacing instead of dividers, `!` instead of a badge.
+The usage source went to one request per three minutes after the endpoint answered 429, and keeps
+its last numbers through passing failures. Seen: the panel hides with the taskbar in a full-screen
+app.

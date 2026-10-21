@@ -17,11 +17,18 @@ _TEXT_FONTS = ("SegUIVar.ttf", "segoeui.ttf")
 _SYMBOL_FONTS = ("seguisym.ttf",)  # glyphs outside the icon fonts, e.g. Claude's spark
 _PRIVATE_USE = range(0xE000, 0xF900)  # where the icon fonts keep their glyphs
 
-# Sizes at 96 DPI, for two rows in a 48 px taskbar.
-GLYPH_PX = 14
-TEXT_PX = 12
-TAG_PX = 9
-BOLT_PX = 9
+# At 96 DPI, for two rows in a 48 px taskbar — from the design council of 2026-10-21, measured against
+# the taskbar's own clock (digits 9 px tall, rows centred at y 15 and 31) and Wi-Fi glyph (16 px).
+GLYPH_PX = 16
+TEXT_PX = 14  # digits ~10 px tall: a touch above the clock; the owner found 12 px "small"
+TEXT_WEIGHT = 500  # between Regular and Semibold: FreeType's grey antialiasing reads lighter than ClearType
+BOLT_PX = 10
+ROWS = (15 / 48, 31 / 48)  # row centres as a share of the taskbar height: the clock's rows
+GAP_INNER = 5  # glyph to number
+GAP_COLUMN = 12  # between columns of one group
+GAP_GROUP = 18  # between the usage column and the devices: spacing is the separator
+PAD = 8
+TAG_ALPHA = 190  # "5h" / "7d": the size of the number (owner), a step quieter
 
 
 @dataclass(frozen=True)
@@ -60,7 +67,7 @@ def _font(names: tuple[str, ...], size: int) -> Font:
             continue
         if name == "SegUIVar.ttf":
             with contextlib.suppress(OSError, ValueError):
-                font.set_variation_by_name("Regular")
+                font.set_variation_by_axes([TEXT_WEIGHT, max(5.0, min(size * 0.75, 36.0))])  # weight, opsz
         return font
     return ImageFont.load_default(size)
 
@@ -114,56 +121,69 @@ _BACKGROUND = (0, 0, 0, 1)
 
 
 def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> tuple[Image.Image, list[Span]]:
-    """Items in two rows, filled column by column. `scale` is the DPI scale (1.0 at 96 DPI)."""
+    """Items in two rows, filled column by column. `scale` is the DPI scale (1.0 at 96 DPI).
+
+    Inside a column every item has the same slots — glyph, then a tag or a bolt, then the number
+    right-aligned in a slot at least as wide as "00%" — so 9% → 10% or 88% → 89% moves nothing and
+    the % signs line up; only a 100% widens its column.
+    """
     glyph_px, bolt_px = round(GLYPH_PX * scale), round(BOLT_PX * scale)
     text_font = _font(_TEXT_FONTS, round(TEXT_PX * scale))
-    tag_font = _font(_TEXT_FONTS, round(TAG_PX * scale))
-    gap_inner, gap_column, pad = round(4 * scale), round(12 * scale), round(6 * scale)
+    gap_inner, pad = round(GAP_INNER * scale), round(PAD * scale)
+    two_digits = _width(text_font, "00%")  # Segoe digits are tabular: any two-digit value fits exactly
+    # The baseline that centres a digit's ink on the row (digits have no descenders).
+    _left, digit_top, _right, digit_bottom = text_font.getbbox("0", anchor="ls")
+    to_baseline = (digit_bottom - digit_top) / 2
 
-    def width_of(it: Item) -> int:
-        w = _glyph_mask(it.glyph, glyph_px).width - 4
-        if it.charging:
-            w += gap_inner + _glyph_mask(BOLT, bolt_px).width - 4
+    def glyph_width(it: Item) -> int:
+        return _glyph_mask(it.glyph, glyph_px).width - 4
+
+    def prefix_width(it: Item) -> int:
         if it.tag:
-            w += gap_inner + _width(tag_font, it.tag)
-        if it.text:
-            w += gap_inner + _width(text_font, it.text)
-        return w
+            return _width(text_font, it.tag) + gap_inner
+        if it.charging:
+            return _glyph_mask(BOLT, bolt_px).width - 4 + gap_inner
+        return 0
 
     columns = [items[i : i + 2] for i in range(0, len(items), 2)]
-    widths = [max(width_of(it) for it in column) for column in columns]
-    total = pad * 2 + sum(widths) + gap_column * max(len(columns) - 1, 0)
+    layout = []
+    for column in columns:
+        glyph_slot = max(glyph_width(it) for it in column)
+        prefix_slot = max(prefix_width(it) for it in column)
+        slot = max([two_digits] + [_width(text_font, it.text) for it in column])
+        layout.append((column, glyph_slot, prefix_slot, slot, glyph_slot + gap_inner + prefix_slot + slot))
+    gaps = [
+        round((GAP_GROUP if left[0][-1].group != right[0][0].group else GAP_COLUMN) * scale)
+        for left, right in zip(layout, layout[1:], strict=False)
+    ]
+    total = pad * 2 + sum(entry[4] for entry in layout) + sum(gaps)
 
     image = Image.new("RGBA", (max(total, 1), height), _BACKGROUND)
     canvas = ImageDraw.Draw(image)
-    rows = (height * 0.29, height * 0.71)
+    rows = [height * share for share in ROWS]
     spans = []
     x = pad
-    for column, column_width in zip(columns, widths, strict=True):
-        # A column with one item sits in the middle, not in the top row.
-        centres = [height / 2] if len(column) == 1 else list(rows)
-        for it, mid in zip(column, centres, strict=False):
+    for index, (column, glyph_slot, prefix_slot, slot, width) in enumerate(layout):
+        # A lone item stays in the top row: centred, it would line up with neither row of the clock.
+        for row, (it, mid) in enumerate(zip(column, rows, strict=False)):
             colour = theme.critical if it.tone is Tone.CRITICAL else theme.text
             fill = (*colour, theme.dim_alpha if it.tone is Tone.DIM else 255)
-            cursor = x + _paste_glyph(image, it.glyph, glyph_px, x, mid, fill)
-            if it.badge:
-                _paste_glyph(image, it.badge, bolt_px, cursor - bolt_px / 2, mid + glyph_px / 3, fill)
-            if it.charging:
-                cursor += gap_inner
-                cursor += _paste_glyph(image, BOLT, bolt_px, cursor, mid, fill)
+            _paste_glyph(image, it.glyph, glyph_px, x + (glyph_slot - glyph_width(it)) / 2, mid, fill)
+            cursor = x + glyph_slot + gap_inner
             if it.tag:
-                cursor += gap_inner
-                canvas.text((cursor, mid), it.tag, font=tag_font, fill=(*colour, theme.dim_alpha), anchor="lm")
-                cursor += _width(tag_font, it.tag)
+                tag_fill = (*colour, min(fill[3], TAG_ALPHA))
+                canvas.text((cursor, mid + to_baseline), it.tag, font=text_font, fill=tag_fill, anchor="ls")
+            elif it.charging:
+                _paste_glyph(image, BOLT, bolt_px, cursor, mid, fill)
             if it.text:
-                cursor += gap_inner
-                canvas.text((cursor, mid), it.text, font=text_font, fill=fill, anchor="lm")
+                right = cursor + prefix_slot + slot
+                canvas.text((right, mid + to_baseline), it.text, font=text_font, fill=fill, anchor="rs")
             # Hover areas split the column at the middle: top item above, bottom item below.
-            top, bottom = (
-                (0, height) if len(column) == 1 else (0, height // 2) if mid < height / 2 else (height // 2, height)
-            )
-            spans.append(Span(it.key, x, top, x + column_width, bottom, it.tooltip))
-        x += column_width + gap_column
+            top, bottom = (0, height // 2) if row == 0 else (height // 2, height)
+            if len(column) == 1:
+                top, bottom = 0, height
+            spans.append(Span(it.key, x, top, x + width, bottom, it.tooltip))
+        x += width + (gaps[index] if index < len(gaps) else 0)
     return _thicken_text(image), spans
 
 

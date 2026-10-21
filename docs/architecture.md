@@ -69,7 +69,9 @@ A failing source returns an error reading, never raises into the poll loop.
   answer that no longer fits becomes "the usage answer changed", never a crash.
 - On the panel: the ✳ glyph (Segoe UI Symbol) + the larger % used of the two windows; red from 80 %.
   Tooltip: both windows with the time to reset. 429 → five minutes' pause; 401/403 → "open Claude Code".
-- At most one request a minute, however often the app polls.
+- One request every three minutes (once a minute drew 429s after an hour); on 429 a pause of 5 min,
+  doubling to 30. A passing failure keeps the last numbers on the panel with "as of HH:MM" in the
+  tooltip, for up to an hour; signing out drops them.
 - No credentials file → no Claude item (the second PC).
 
 ## 4. Install and self-update
@@ -162,30 +164,37 @@ tests/
 Layering (checked by `scripts/arch_lint.py`): `core` imports nothing from `sources`, `panel`, `tray`,
 `update` or any IO library; `sources` never import `panel` or `tray`.
 
-## 6. Look — the system's own style (owner, 2026-10-20 / 21)
+## 6. Look — the system's own style (owner, 2026-10-20 / 21; design council 2026-10-21)
 
 **Two rows**, filled column by column, the way TrafficMonitor lays out its numbers. Each item is a
 glyph and a number, nothing else — like the clock and the Wi-Fi / volume glyphs next to it:
 
 ```
- ✳ 5h 18%   🖱 88%
- ✳ 7d 55%   🎧 80%        (glyphs from Segoe Fluent Icons, not emoji)
+ ✳ 5h  8%    🖱 88%
+ ✳ 7d 57%    🎧 80%        (glyphs from Segoe Fluent Icons, not emoji)
 ```
 
-- **Glyphs** come from the font Windows 11 draws its own icons with, Segoe Fluent Icons (Segoe MDL2
-  Assets on Windows 10): keyboard, mouse, headphones, game controller, phone, a generic Bluetooth
-  glyph when the kind is unknown; the usage spark ✳ from Segoe UI Symbol. The kind comes from the
-  device's classes and Bluetooth profiles, not from its name (except game controllers).
-- **Weight**: FreeType draws these glyphs hairline-thin next to the taskbar's own; they are drawn at
-  4×, every stroke grown by a 3×3 max filter, and scaled down — the weight of the volume glyph,
-  with a keyboard's keys still apart. Text gets a gamma lift (0.6) to match the clock.
-- **Text** in Segoe UI Variable, 12 px at 96 DPI, in the taskbar's text colour (light/dark theme),
-  no background, no boxes.
+Measured against the taskbar's own clock (digits 9 px tall, rows centred at y 15 and 31 of 48) and
+Wi-Fi glyph (16 px), at 96 DPI, scaled with the taskbar's DPI:
+
+| Element | Value | Why |
+| ------- | ----- | --- |
+| Rows | centres at 15/48 and 31/48 of the height | the clock's rows — the panel reads as part of it |
+| Numbers | Segoe UI Variable 14 px, weight 500, gamma-lifted alpha | digits ~10 px tall; 12 px read "small" to the owner |
+| Glyphs | 16 px, drawn at 4×, strokes grown by a 3×3 max filter, scaled down | the Wi-Fi glyph's size; owner asked for thicker lines |
+| Tags `5h` / `7d` | the number's size (owner), ~75 % alpha | a smaller tag was unreadable on a red taskbar |
+| Number slot | right-aligned, at least as wide as `00%` | 9 → 10 % and 88 → 89 % move nothing; % signs line up |
+| Gaps | glyph → number 5, columns 12, usage ↔ devices 18, padding 8 | spacing separates the groups; no divider lines |
+| Lone last item | top row | centred, it lines up with neither clock row |
+
+- **Glyphs**: keyboard, mouse, headphones, game controller, phone, a generic Bluetooth glyph when the
+  kind is unknown; the usage spark ✳ from Segoe UI Symbol. The kind comes from the device's classes
+  and Bluetooth profiles, not from its name (except game controllers).
+- **Colour**: the taskbar's text colour (light/dark theme), no background, no boxes. Low (< 20 %) →
+  system red. Charging → a small bolt before the number. Unavailable → dimmed, `!` for a number, the
+  reason in the tooltip (a badge over the glyph is not a Windows pattern).
 - **Disconnected devices are not shown at all** — a cached number says nothing (owner, 2026-10-21).
-  Charging → a small bolt before the number. Low (< 20 %) → the number turns red (system red).
-  Unavailable (error) → the glyph dimmed with "!", the reason in the tooltip.
-- **Usage limits** → two items, one per window: ✳ `5h` and ✳ `7d` (small dim tag) + % used; red
-  from 80 %.
+- **Usage limits** → two items, one per window, ✳ `5h` and ✳ `7d` + % used; red from 80 %.
 - **Tooltip** on hover: the full name, state, the time of the reading; for usage the window's time
-  to reset. The hover areas split each column at the middle.
+  to reset. Hover areas split each column at the middle.
 - A toast once when a device drops below 15 % (not again until it recovers).
