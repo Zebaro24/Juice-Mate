@@ -46,3 +46,13 @@ Tray icons remain only as the fallback when the panel cannot attach. Running: ~3
 
 Seen on the owner's PC: the panel in place, the tooltip on hover. ⚠️ Not tried yet: Explorer restart,
 auto-hide, full-screen apps, a light taskbar, the right-click menu, a second monitor.
+
+## Step 04 — Hator mouse (2026-10-21)
+
+`sources/hator.py` finds the Telink dongle (248A:5B4A, usage page 0xFF01), sends `07 89 00…` and reads
+feature report 7, eight bytes. The owner's mouse answered `07 89 59 01 02 03 00 00` → 89 %. A median
+of the last five reads (`core/smoothing.py`) holds the voltage jitter still and resets on a charger
+change. On the panel: mouse glyph + 89 % next to the live G435 80 % (which also closes step 02's
+"connected" check). No dongle → no item. ⚠️ Charging via PID 5B49 on the cable, and the mouse switched
+off, are covered by tests only — a 5-minute watch on the real mouse saw no change because nothing was
+plugged or switched.

@@ -49,10 +49,12 @@ A failing source returns an error reading, never raises into the poll loop.
 ### 3.2 Hator Stellar Pro Wireless (HID)
 
 - Dongle: Telink `VID_248A PID_5B4A`, the interface with usage page `0xFF01`.
-- Request: `SetFeature 07 89 00 00 00 00 00 00 00` → `GetFeature(report 7, len 8)` →
+- Request: `SetFeature 07 89 00 00 00 00 00 00` → `GetFeature(report 7, len 8)` (eight bytes with the
+  report id; asking for nine fails with "read error") →
   `07 89 XX 01 02 03 00 00`, `XX` = battery %.
 - The value is voltage-based and jitters ±1–3 % → smooth (median of recent readings, show integer).
 - Charging: on cable the mouse also appears as USB `VID_248A PID_5B49` → `charging = True`.
+- No answer, or zeros → the mouse is off or asleep → disconnected. The dongle cannot be opened → error.
 - Present only when the dongle is found. Replaces Hator Hub (to be uninstalled at the end).
 
 ### 3.3 Claude usage limits — the fragile one

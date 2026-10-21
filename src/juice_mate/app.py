@@ -20,6 +20,7 @@ from juice_mate.core.metric import Unit, short
 from juice_mate.core.reading import level
 from juice_mate.sources import Sensor, Source, poll_all
 from juice_mate.sources.bluetooth import Bluetooth
+from juice_mate.sources.hator import Hator
 from juice_mate.sources.system import (
     CpuLoad,
     DiskSpeed,
@@ -34,6 +35,10 @@ log = logging.getLogger("juice_mate")
 
 POLL_SECONDS = 30
 _ERROR_ALREADY_EXISTS = 183
+
+
+def battery_sources() -> list[Source]:
+    return [Bluetooth(), Hator()]
 
 
 def sensors() -> list[Sensor]:
@@ -53,7 +58,7 @@ def sensors() -> list[Sensor]:
 
 def dump() -> None:
     print("Batteries")
-    readings = Bluetooth().poll()
+    readings = poll_all(battery_sources())
     for r in readings:
         state = r.error or ("connected" if r.connected else "disconnected — % is cached")
         percent = r.percent if r.percent is not None else "–"
@@ -126,4 +131,4 @@ def main() -> None:
     if not _first_instance():
         log.info("already running")
         return
-    run([Bluetooth()])
+    run(battery_sources())

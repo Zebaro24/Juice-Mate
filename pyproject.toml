@@ -16,6 +16,8 @@ pystray = "^0.19.5"
 pillow = "^13.0.0"
 # --- System sensors: network, CPU, memory, disk (no kernel driver) ---
 psutil = "^7.2.2"
+# --- HID feature reports: the Hator mouse dongle ---
+hidapi = "^0.15.0"
 
 # ───────────────────────────────────────────────────────────────────────────
 # Development dependencies
@@ -63,8 +65,8 @@ mypy_path = "src"
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-# No type stubs are published for pystray.
-module = ["pystray", "pystray.*"]
+# No type stubs are published for pystray or hidapi.
+module = ["pystray", "pystray.*", "hid"]
 ignore_missing_imports = true
 
 [tool.pyright]
