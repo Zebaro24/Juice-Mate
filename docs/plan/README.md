@@ -15,7 +15,7 @@ Ordered by dependency. ✅ done · ⚠️ written, not verified on the real targ
 | 02b | System sensors (§4a) as components: network, CPU, memory, GPU load, GPU temp, disk — readable with `--dump`, not shown yet | ✅ |
 | 03 | Taskbar panel (§4b, §6): spike first — attach to `Shell_TrayWnd`, survive Explorer restart, auto-hide, full screen, light/dark — then glyph + % per device in the system style, tooltip, right-click menu; the tray icons go | ✅ · ⚠️ Explorer restart, auto-hide, full screen and a light taskbar not yet tried; the menu not clicked |
 | 04 | Hator source (§3.2): HID feature report, smoothing, charging via PID 5B49 | ✅ · ⚠️ charging (cable) and mouse-off not yet seen on the real mouse |
-| 05 | Claude source (§3.3): confirm the usage endpoint, read-only token, 5 h + weekly item | |
+| 05 | Claude source (§3.3): confirm the usage endpoint, read-only token, 5 h + weekly item | ✅ |
 | 06 | Thresholds and toasts (§6), autostart toggle | |
 | 07 | Packaging and self-update (§4): PyInstaller `--windowed` + Velopack, CI release on tag, GitHub source | |
 | 08 | System sensors on the panel — the ones the owner picks; then uninstall TrafficMonitor | |

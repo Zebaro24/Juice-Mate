@@ -75,4 +75,4 @@ def test_pixels_are_premultiplied_bgra() -> None:
 
 
 def test_bolt_glyph_is_from_the_icon_font() -> None:
-    assert BOLT == ""
+    assert BOLT == "\ue945"

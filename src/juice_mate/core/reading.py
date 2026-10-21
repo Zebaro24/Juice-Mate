@@ -1,9 +1,10 @@
-"""One reading from one source, and the level the tray shows for it (docs/architecture.md §3, §6)."""
+"""One reading from one source, and the level the panel shows for it (docs/architecture.md §3, §6)."""
 
 from dataclasses import dataclass
 from enum import StrEnum
 
 LOW_PERCENT = 20
+HIGH_USAGE_PERCENT = 80
 
 
 class Kind(StrEnum):
@@ -15,6 +16,7 @@ class Kind(StrEnum):
     GAMEPAD = "gamepad"
     PHONE = "phone"
     OTHER = "other"
+    CLAUDE = "claude"  # not a battery: `percent` is usage, and high is the bad end
 
 
 class Level(StrEnum):
@@ -37,6 +39,7 @@ class Reading:
     charging: bool | None = None
     error: str | None = None
     kind: Kind = Kind.OTHER
+    note: str | None = None  # replaces the default state text in the tooltip
 
 
 def level(reading: Reading, low: int = LOW_PERCENT) -> Level:
@@ -45,6 +48,8 @@ def level(reading: Reading, low: int = LOW_PERCENT) -> Level:
         return Level.OFFLINE
     if reading.error is not None or reading.percent is None:
         return Level.UNKNOWN
+    if reading.kind is Kind.CLAUDE:
+        return Level.LOW if reading.percent >= HIGH_USAGE_PERCENT else Level.OK
     if reading.charging:
         return Level.CHARGING
     return Level.LOW if reading.percent < low else Level.OK

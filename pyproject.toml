@@ -18,6 +18,8 @@ pillow = "^13.0.0"
 psutil = "^7.2.2"
 # --- HID feature reports: the Hator mouse dongle ---
 hidapi = "^0.15.0"
+# --- HTTP: Claude usage limits ---
+httpx = "^0.28.1"
 
 # ───────────────────────────────────────────────────────────────────────────
 # Development dependencies
@@ -56,7 +58,7 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
+"tests/**" = ["S101", "S105", "S106", "S107"]  # asserts; fake tokens in fixtures
 
 [tool.mypy]
 strict = true

@@ -20,6 +20,7 @@ from juice_mate.core.metric import Unit, short
 from juice_mate.core.reading import level
 from juice_mate.sources import Sensor, Source, poll_all
 from juice_mate.sources.bluetooth import Bluetooth
+from juice_mate.sources.claude import Claude
 from juice_mate.sources.hator import Hator
 from juice_mate.sources.system import (
     CpuLoad,
@@ -38,7 +39,7 @@ _ERROR_ALREADY_EXISTS = 183
 
 
 def battery_sources() -> list[Source]:
-    return [Bluetooth(), Hator()]
+    return [Claude(), Bluetooth(), Hator()]
 
 
 def sensors() -> list[Sensor]:

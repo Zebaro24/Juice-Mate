@@ -56,3 +56,11 @@ change. On the panel: mouse glyph + 89 % next to the live G435 80 % (which also 
 "connected" check). No dongle → no item. ⚠️ Charging via PID 5B49 on the cable, and the mouse switched
 off, are covered by tests only — a 5-minute watch on the real mouse saw no change because nothing was
 plugged or switched.
+
+## Step 05 — Claude limits (2026-10-21)
+
+`sources/claude.py` reads the access token from `~/.claude/.credentials.json` (never writes it, never
+refreshes it — a test checks the file is byte-identical after a poll) and asks the usage endpoint at
+most once a minute. Live on the owner's PC: ✳ 55 % on the panel, tooltip "5 h 13% (resets in 20 min) ·
+week 55% (resets in 4 d 23 h)". No credentials file → no item; expired token / 401 → "open Claude
+Code"; 429 → five minutes' pause; a changed answer → "the usage answer changed".

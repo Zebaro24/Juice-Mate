@@ -13,6 +13,7 @@ from juice_mate.core.display import BOLT, Item, Tone
 
 _ICON_FONTS = ("SegoeIcons.ttf", "segmdl2.ttf")  # Windows 11, Windows 10
 _TEXT_FONTS = ("SegUIVar.ttf", "segoeui.ttf")
+_SYMBOL_FONTS = ("seguisym.ttf",)  # glyphs outside the icon fonts, e.g. Claude's spark
 
 
 @dataclass(frozen=True)
@@ -73,9 +74,15 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
     text_font = _font(_TEXT_FONTS, round(14 * scale))
     gap_inner, gap_outer, pad = round(5 * scale), round(14 * scale), round(6 * scale)
 
+    symbol_font = _font(_SYMBOL_FONTS, round(16 * scale))
+
+    def glyph_font_for(glyph: str) -> Font:
+        # The icon fonts live in the Private Use Area; anything else comes from Segoe UI Symbol.
+        return glyph_font if "\ue000" <= glyph <= "\uf8ff" else symbol_font
+
     widths = []
     for it in items:
-        w = _width(glyph_font, it.glyph)
+        w = _width(glyph_font_for(it.glyph), it.glyph)
         if it.charging:
             w += gap_inner + _width(small_glyph, BOLT)
         if it.text:
@@ -93,8 +100,9 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
         colour = theme.critical if it.tone is Tone.CRITICAL else theme.text
         alpha = theme.dim_alpha if it.tone is Tone.DIM else 255
         fill = (*colour, alpha)
-        canvas.text((x, mid), it.glyph, font=glyph_font, fill=fill, anchor="lm")
-        glyph_w = _width(glyph_font, it.glyph)
+        font = glyph_font_for(it.glyph)
+        canvas.text((x, mid), it.glyph, font=font, fill=fill, anchor="lm")
+        glyph_w = _width(font, it.glyph)
         if it.struck:
             # A diagonal stroke over the glyph, the way Windows crosses out a muted speaker.
             half = glyph_w / 2 + scale

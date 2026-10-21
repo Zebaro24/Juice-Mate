@@ -62,10 +62,14 @@ A failing source returns an error reading, never raises into the poll loop.
 - Token: Claude Code's OAuth token from `~/.claude/.credentials.json`. **Read only. Never refresh it** —
   refreshing rotates the token and logs Claude Code out. Expired token → "re-open Claude Code" state,
   not a refresh.
-- Request: the same one Claude Code's `/usage` makes — 5-hour window and weekly window, % used and
-  reset time. The endpoint is internal and undocumented: confirm it on the spot (step 04), keep the
-  parsing in one module with a schema version, and degrade to "data unavailable" instead of crashing.
-- Poll no more than once a minute.
+- Request (confirmed 2026-10-21): `GET https://api.anthropic.com/api/oauth/usage`, headers
+  `Authorization: Bearer <accessToken>` and `anthropic-beta: oauth-2025-04-20` → `five_hour` and
+  `seven_day`, each `{utilization: % used, resets_at: ISO time}`. The answer also carries a dozen
+  code-named experimental keys — **only those two are read**; parsing lives in `core/usage.py`, and an
+  answer that no longer fits becomes "the usage answer changed", never a crash.
+- On the panel: the ✳ glyph (Segoe UI Symbol) + the larger % used of the two windows; red from 80 %.
+  Tooltip: both windows with the time to reset. 429 → five minutes' pause; 401/403 → "open Claude Code".
+- At most one request a minute, however often the app polls.
 - No credentials file → no Claude item (the second PC).
 
 ## 4. Install and self-update

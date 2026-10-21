@@ -11,15 +11,16 @@ from enum import StrEnum
 from juice_mate.core.reading import Kind, Level, Reading, level
 
 GLYPHS: dict[Kind, str] = {
-    Kind.KEYBOARD: "",  # KeyboardClassic
-    Kind.MOUSE: "",  # Mouse
-    Kind.HEADSET: "",  # Headphone
-    Kind.GAMEPAD: "",  # Game
-    Kind.PHONE: "",  # CellPhone
-    Kind.OTHER: "",  # Bluetooth
+    Kind.KEYBOARD: "\ue765",  # KeyboardClassic
+    Kind.MOUSE: "\ue962",  # Mouse
+    Kind.HEADSET: "\ue7f6",  # Headphone
+    Kind.GAMEPAD: "\ue7fc",  # Game
+    Kind.PHONE: "\ue8ea",  # CellPhone
+    Kind.OTHER: "\ue702",  # Bluetooth
+    Kind.CLAUDE: "\u2733",  # eight-spoked asterisk, drawn from Segoe UI Symbol: Claude's spark
 }
-BOLT = ""  # LightningBolt
-WARNING = ""  # Warning
+BOLT = "\ue945"  # LightningBolt
+WARNING = "\ue7ba"  # Warning
 
 
 class Tone(StrEnum):
@@ -46,6 +47,8 @@ def tooltip(reading: Reading, now: datetime) -> str:
     lvl = level(reading)
     if reading.error:
         state = f"unavailable: {reading.error}"
+    elif reading.note:
+        state = reading.note
     elif lvl is Level.OFFLINE:
         state = "disconnected"
     else:
@@ -71,7 +74,7 @@ def item(reading: Reading, now: datetime) -> Item:
     )
 
 
-ORDER = [Kind.KEYBOARD, Kind.MOUSE, Kind.HEADSET, Kind.GAMEPAD, Kind.PHONE, Kind.OTHER]
+ORDER = [Kind.CLAUDE, Kind.KEYBOARD, Kind.MOUSE, Kind.HEADSET, Kind.GAMEPAD, Kind.PHONE, Kind.OTHER]
 
 
 def items(readings: list[Reading], now: datetime) -> list[Item]:
