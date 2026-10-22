@@ -63,3 +63,18 @@ def test_no_claude_code_on_this_pc_means_no_run() -> None:
     runner = Runner()
     make(runner, exe=None).request("expired")
     assert runner.calls == []
+
+
+def test_news_in_the_prompt_becomes_headlines() -> None:
+    runner = Runner()
+    run = ClaudeRun(lambda: "News:\n{news}", runner, exe=lambda: "claude", background=False, news=lambda: "- [X] Y")
+    run.request("idle window")
+    assert runner.calls[0][2] == "News:\n- [X] Y"
+
+
+def test_no_headlines_renews_silently() -> None:
+    runner = Runner()
+    run = ClaudeRun(lambda: "News:\n{news}", runner, exe=lambda: "claude", background=False, news=lambda: "")
+    run.request("idle window")
+    assert runner.calls[0][2] == QUIET_PROMPT
+    assert run.take_reply() is None

@@ -115,3 +115,7 @@ rounds down like Claude Code's `/usage` (it showed 2 % where the panel said 3 %)
 an idle 5-hour window makes Juice-Mate run `claude -p` on Haiku once (tried by hand: 3 s, answer in
 Russian); its answer comes as a toast. ⚠️ Not yet seen in the app itself: a run on a real expiry or
 idle window, the toast, a left-aligned taskbar.
+
+The run's default prompt is now the day's tech news: Juice-Mate reads The Verge, TechCrunch and
+Engadget RSS and Haiku picks two stories. Tried for real: 45 headlines, 7 s, the answer was a new
+Anthropic model and Sony's Pulse headset, one Russian line each.

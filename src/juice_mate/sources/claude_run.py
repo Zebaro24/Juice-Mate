@@ -18,12 +18,15 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from juice_mate.sources.news import headlines
+
 log = logging.getLogger(__name__)
 
 PING_EVERY = 1800.0  # seconds between runs, however often one is asked for
 TIMEOUT = 120.0
 MODEL = "haiku"
 QUIET_PROMPT = "Reply with just: ok"  # an empty prompt in the settings: renew, no notification
+NEWS = "{news}"  # in the prompt: replaced by the last day's tech headlines
 _NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW: no console flashes up from a windowed app
 
 
@@ -64,9 +67,12 @@ class ClaudeRun:
         exe: Callable[[], str | None] = find_claude,
         clock: Callable[[], float] = time.time,
         background: bool = True,
+        news: Callable[[], str] = headlines,
     ) -> None:
-        """`prompt` is asked at each run, so a change in the settings takes effect without a restart."""
+        """`prompt` is asked at each run, so a change in the settings takes effect without a restart.
+        A `{news}` in it becomes the last day's tech headlines (news.py)."""
         self._prompt = prompt
+        self._news = news
         self._run = run
         self._exe = exe
         self._clock = clock
@@ -99,6 +105,9 @@ class ClaudeRun:
         folder = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "JuiceMate"
         try:
             prompt = self._prompt().strip()
+            if NEWS in prompt:
+                news = self._news()
+                prompt = prompt.replace(NEWS, news) if news else ""  # no headlines: renew silently
             folder.mkdir(parents=True, exist_ok=True)
             done = self._run(
                 command(exe, prompt or QUIET_PROMPT),

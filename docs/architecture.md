@@ -66,8 +66,11 @@ A failing source returns an error reading, never raises into the poll loop.
   re-read every poll (no request), so the renewed token shows at once.
 - **Keeping the 5-hour window running** (owner, 2026-10-22; a menu checkbox, off by default — it spends the account's quota): when the
   answer shows no running 5-hour window, the same run opens one. At most one run per 30 min. The
-  prompt is `claude_prompt` in `settings.json` (a "surprising fact" by default) and its answer comes
-  as a toast; an empty prompt renews silently. One run costs a fraction of a percent of the window.
+  prompt is `claude_prompt` in `settings.json` and its answer comes as a toast; an empty prompt
+  renews silently. `{news}` in the prompt becomes the last day's headlines from The Verge, TechCrunch
+  and Engadget RSS (`sources/news.py`, fetched by Juice-Mate: ~1k tokens, where a web search by
+  Claude Code would cost thousands). The default (owner, 2026-10-22): the two tech stories that matter
+  most to an ordinary user — a new device, a new AI model, a launch — one Russian line each. One run costs a fraction of a percent of the window.
 - Request (confirmed 2026-10-21): `GET https://api.anthropic.com/api/oauth/usage`, headers
   `Authorization: Bearer <accessToken>` and `anthropic-beta: oauth-2025-04-20` → `five_hour` and
   `seven_day`, each `{utilization: % used, resets_at: ISO time}`. The answer also carries a dozen

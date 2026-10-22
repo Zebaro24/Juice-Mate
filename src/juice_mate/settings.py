@@ -16,8 +16,17 @@ log = logging.getLogger(__name__)
 # What TrafficMonitor showed on the owner's taskbar (config.ini, 2026-10-20), minus CPU temperature.
 DEFAULT_SENSORS = ["net.up", "net.down", "cpu.load", "gpu.load"]
 # What the invisible Claude Code run asks (sources/claude_run.py); its answer becomes a notification.
-# An empty string: the run still renews the token and starts the window, silently.
-DEFAULT_PROMPT = "Tell me one surprising, little-known fact from science, history or technology in two sentences."
+# `{news}` becomes the last day's tech headlines (sources/news.py). An empty string: the run still
+# renews the token and starts the window, silently. The owner wants the day's tech news (2026-10-22),
+# in Russian, the owner's language.
+NEWS_PROMPT = (
+    "Tech news headlines from the last 24 hours:\n{news}\n\n"
+    "Pick the two that matter most to an ordinary tech user: a new device and what it can do, a new AI "
+    "model, a major launch, release or deal. Skip politics, lawsuits, deals of the day and opinion "
+    "pieces. For each, one line in Russian, at most 20 words: what happened and why it is interesting. "
+    "Start each line with an emoji. No intro, no links, nothing else."
+)
+DEFAULT_PROMPT = NEWS_PROMPT
 
 
 def _path() -> Path:
