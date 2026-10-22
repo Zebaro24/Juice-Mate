@@ -65,3 +65,34 @@ def test_quit_reaches_the_listener_and_only_it(monkeypatch: pytest.MonkeyPatch) 
     quit.listen(asked.set)
     assert quit.request() is True
     assert asked.wait(5)
+
+
+def test_a_menu_click_does_not_undo_the_windows_change(data_folder: Path) -> None:
+    panel = Settings.load()
+    panel.save()
+    assert Api().set_in("placement", "bluetooth:kb", "left")  # the window, meanwhile
+    panel.change(lambda s: s.toggle_sensor("net.ping"))  # the panel's menu, with a stale copy
+    on_disk = Settings.load()
+    assert on_disk.placement == {"bluetooth:kb": "left"}
+    assert "net.ping" in on_disk.sensors
+
+
+def test_the_window_sends_entries_not_whole_maps() -> None:
+    assert not Api().assign("sources", {"claude": False})
+    assert Api().set_in("sources", "claude", False)
+    assert Api().sensor("net.ping", True)
+    assert Api().set_in("placement", "bluetooth:kb", None)
+    settings = Settings.load()
+    assert settings.sources["claude"] is False and settings.sources["bluetooth"] is True
+    assert "net.ping" in settings.sensors
+
+
+def test_an_unreadable_file_is_not_defaults(data_folder: Path) -> None:
+    panel = Settings(battery_low=33)
+    panel.save()
+    path = data_folder / "settings.json"
+    path.write_text("{ half written", encoding="utf-8")
+    assert not panel.reload_if_changed()
+    assert panel.battery_low == 33  # kept, not reset
+    assert not Api().assign("usage_high", 90)  # and the window does not write defaults over it
+    assert path.read_text(encoding="utf-8") == "{ half written"

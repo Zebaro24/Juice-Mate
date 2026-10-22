@@ -355,6 +355,7 @@ PING_TARGET = "1.1.1.1"  # Cloudflare's resolver: answers ICMP everywhere, rarel
 PING_EVERY = 2.0
 PING_TIMEOUT_MS = 1000
 PING_MISSES_OFFLINE = 2  # one lost packet is noise; two in a row is "the internet is gone"
+PING_IDLE = 10.0  # seconds without a read: the sensor is off the panel, stop pinging
 
 
 class _IpOptions(ctypes.Structure):
@@ -417,7 +418,10 @@ def ping_once(target: str = PING_TARGET, timeout_ms: int = PING_TIMEOUT_MS) -> f
 
 class Ping:
     """Latency to PING_TARGET, measured on a thread of its own: a lost packet waits a whole second,
-    which the poll loop must not."""
+    which the poll loop must not.
+
+    Only while shown: the thread starts at the first read and stops when nobody has read for
+    PING_IDLE — a PC that never turns the sensor on never sends a packet."""
 
     sensor = "net.ping"
     name = "Ping"
@@ -428,11 +432,12 @@ class Ping:
         self._misses = 0
         self._error: str | None = "measuring…"
         self._stop = threading.Event()
-        if start:
-            threading.Thread(target=self._loop, name="ping", daemon=True).start()
+        self._background = start
+        self._thread: threading.Thread | None = None
+        self._last_read = 0.0
 
     def _loop(self) -> None:
-        while not self._stop.is_set():
+        while not self._stop.is_set() and time.monotonic() - self._last_read < PING_IDLE:
             self.measure()
             self._stop.wait(PING_EVERY)
 
@@ -450,6 +455,11 @@ class Ping:
         self._misses, self._value, self._error = 0, rtt, None
 
     def read(self) -> Metric:
+        self._last_read = time.monotonic()
+        if self._background and (self._thread is None or not self._thread.is_alive()):
+            self._error = self._error if self._value is not None else "measuring…"
+            self._thread = threading.Thread(target=self._loop, name="ping", daemon=True)
+            self._thread.start()
         if self._value is None:
             return _failed(self.sensor, self.name, Unit.MILLISECONDS, self._error or OFFLINE)
         return Metric(self.sensor, self.name, self._value, Unit.MILLISECONDS)

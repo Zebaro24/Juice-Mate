@@ -15,6 +15,7 @@ import logging
 import os
 import sys
 import winreg
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from importlib import resources
 from pathlib import Path
@@ -118,20 +119,44 @@ class Api:
             "default_prompt": DEFAULT_PROMPT,
         }
 
-    def assign(self, name: str, value: Any) -> bool:
-        settings = Settings.load()
-        if not settings.assign(name, value):
-            log.warning("settings window: %s refused", name)
+    # Every change: the file as it is now (strict: an unreadable file is not "defaults"), one field or
+    # one entry changed, saved. Whole maps and lists are never sent from the page: they would undo
+    # what the panel's menu changed since the page loaded. True only when the file was written.
+
+    def _edit(self, edit: Callable[[Settings], bool]) -> bool:
+        try:
+            settings = Settings.load(strict=True)
+        except (OSError, ValueError):
+            log.warning("settings unreadable for now; change not saved")
             return False
-        settings.save()
-        return True
+        return edit(settings) and settings.save()
+
+    def assign(self, name: str, value: Any) -> bool:
+        if name in ("sources", "alerts", "placement", "sensors", "devices"):
+            return False  # entries go through set_in / sensor / device
+        return self._edit(lambda s: s.assign(name, value))
+
+    def set_in(self, name: str, key: str, value: Any) -> bool:
+        if name not in ("sources", "alerts", "placement"):
+            return False
+        return self._edit(lambda s: s.set_in(name, key, value))
+
+    def sensor(self, sensor: str, on: bool) -> bool:
+        def edit(s: Settings) -> bool:
+            if (sensor in s.sensors) != bool(on):
+                s.toggle_sensor(sensor)
+            return True
+
+        return self._edit(edit)
 
     def device(self, key: str, changes: dict[str, Any]) -> bool:
         allowed = {k: v for k, v in changes.items() if k in ("name", "kind", "hidden")}
-        settings = Settings.load()
-        settings.set_device(key, **allowed)
-        settings.save()
-        return True
+
+        def edit(s: Settings) -> bool:
+            s.set_device(key, **allowed)
+            return True
+
+        return self._edit(edit)
 
     def open_url(self, url: str) -> None:
         """Only the project's own page: the page must not become a way to launch anything."""

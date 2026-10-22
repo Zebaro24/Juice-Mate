@@ -88,3 +88,10 @@ def test_device_changes_round_trip(tmp_path: Path) -> None:
     assert prefs["bluetooth:phone"].hidden
     settings.set_device("bluetooth:kb", name="", kind=None)  # back to what the source found
     assert "bluetooth:kb" not in settings.devices
+
+
+def test_a_hidden_device_sends_no_alert() -> None:
+    readings = [reading("kb", percent=5), reading("mouse", percent=5)]
+    shown = personalise(readings, {"bluetooth:kb": DevicePref(hidden=True), "bluetooth:mouse": DevicePref(name="Мышь")})
+    [alert] = Alerts().check(shown)
+    assert alert.title.startswith("Мышь")

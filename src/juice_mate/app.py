@@ -181,19 +181,18 @@ def run() -> None:
         refresh.set()
         wake.set()
 
+    # Menu changes go through settings.change(): it reads what the settings window may have just
+    # written before editing, so a click never saves a stale copy over it.
     def toggle_sensor(sensor: str) -> None:
-        settings.toggle_sensor(sensor)
-        settings.save()
+        settings.change(lambda s: s.toggle_sensor(sensor))
         wake.set()
 
     def toggle_source(source: str) -> None:
-        settings.toggle_source(source)
-        settings.save()
+        settings.change(lambda s: s.toggle_source(source))
         refresh_now()
 
     def toggle_keep_window() -> None:
-        settings.keep_claude_window = not settings.keep_claude_window
-        settings.save()
+        settings.change(lambda s: setattr(s, "keep_claude_window", not s.keep_claude_window))
 
     seen: dict[str, Entry] = {}  # everything that ever reported, for the settings window's list
 
@@ -270,7 +269,8 @@ def run() -> None:
             readings = poll_all([source for name, source in named.items() if settings.source_on(name)])
             remember(readings)
             batteries_due = now + BATTERY_SECONDS
-            for alert in alerts.check(readings, settings.battery_alert):
+            # As the panel shows them: a hidden device stays quiet, a renamed one alerts by its new name.
+            for alert in alerts.check(personalise(readings, settings.device_prefs()), settings.battery_alert):
                 if settings.alert_on(alert.kind):
                     toasts.show(alert)
         reply = claude_run.take_reply()

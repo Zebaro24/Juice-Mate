@@ -306,9 +306,19 @@ function saved() {
   clearTimeout(savedTimer);
   savedTimer = setTimeout(() => box.classList.remove("on"), 1600);
 }
+// One field, or one entry of a map — never a whole map built from this page's snapshot, which would
+// undo what the panel's own menu changed meanwhile. "Saved" only when the file was really written.
 async function assign(name, value) {
   S.settings[name] = value;
   if (await api().assign(name, value)) saved();
+}
+async function setIn(name, key, value) {
+  if (value === null) delete S.settings[name][key]; else S.settings[name][key] = value;
+  if (await api().set_in(name, key, value)) saved();
+}
+async function sensor(name, on) {
+  S.settings.sensors = on ? [...S.settings.sensors.filter((x) => x !== name), name] : S.settings.sensors.filter((x) => x !== name);
+  if (await api().sensor(name, on)) saved();
 }
 async function device(key, changes) {
   const entry = { ...(S.settings.devices[key] || {}), ...changes };
@@ -379,11 +389,11 @@ function renderGeneral() {
   const sources = document.getElementById("sources");
   sources.replaceChildren(
     card("&#x2733;", "Claude usage limits", "The 5-hour and weekly limits from your Claude Code login",
-      toggle(s.sources.claude !== false, (on) => assign("sources", { ...S.settings.sources, claude: on })), true),
+      toggle(s.sources.claude !== false, (on) => setIn("sources", "claude", on)), true),
     card("&#xE702;", "Bluetooth devices", "Headphones, keyboards, mice, controllers and phones that report their battery",
-      toggle(s.sources.bluetooth !== false, (on) => assign("sources", { ...S.settings.sources, bluetooth: on }))),
+      toggle(s.sources.bluetooth !== false, (on) => setIn("sources", "bluetooth", on))),
     card("&#xE962;", "HATOR mouse", "Read through its USB dongle",
-      toggle(s.sources.hator !== false, (on) => assign("sources", { ...S.settings.sources, hator: on }))),
+      toggle(s.sources.hator !== false, (on) => setIn("sources", "hator", on))),
   );
   stagger(sources);
 
@@ -451,8 +461,7 @@ function itemCard(e) {
   const where = el(`<select>${S.places.map((p) => `<option value="${p}">${PLACE[p]}</option>`).join("")}</select>`);
   where.value = placeOf(e);
   where.onchange = () => {
-    const rest = Object.fromEntries(Object.entries(S.settings.placement).filter(([k]) => k !== e.key));
-    assign("placement", where.value === e.place ? rest : { ...rest, [e.key]: where.value });
+    setIn("placement", e.key, where.value === e.place ? null : where.value);
     refreshCard();
   };
   inner.push(line("Where", where));
@@ -463,11 +472,8 @@ function itemCard(e) {
   inner.push(line("Order", up, down));
 
   const shown = toggle(shownOf(e), (on) => {
-    if (e.group === "sensor") {
-      const sensor = e.key.replace("system:", "");
-      const rest = S.settings.sensors.filter((x) => x !== sensor);
-      assign("sensors", on ? [...rest, sensor] : rest);
-    } else device(e.key, { hidden: !on });
+    if (e.group === "sensor") sensor(e.key.replace("system:", ""), on);
+    else device(e.key, { hidden: !on });
     refreshCard();
   });
   const node = expander(glyphOf(e), nameOf(e), sub(), inner, shown, e.group === "usage");
@@ -542,7 +548,7 @@ function renderAlerts() {
   ];
   const n = document.getElementById("notify");
   n.replaceChildren(...kinds.map(([kind, icon, title, sub, spark]) =>
-    card(icon, title, sub, toggle(s.alerts[kind] !== false, (on) => assign("alerts", { ...S.settings.alerts, [kind]: on })), spark)));
+    card(icon, title, sub, toggle(s.alerts[kind] !== false, (on) => setIn("alerts", kind, on)), spark)));
   n.append(card("&#xE7E7;", "Battery notification below", "Once per discharge — not again until it is charged",
     numberBox(s.battery_alert, 1, 99, "%", (v) => assign("battery_alert", v))));
   stagger(n);

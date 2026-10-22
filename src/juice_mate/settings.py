@@ -13,7 +13,10 @@ or the other.
 import contextlib
 import json
 import logging
+import os
 import threading
+import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any
@@ -69,7 +72,7 @@ class Settings:
     claude_prompt: str = DEFAULT_PROMPT
 
     def __post_init__(self) -> None:
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()  # the poll loop reloads, the menu changes: one at a time
         self._mtime: int | None = None  # the file as last read or written by this process
 
     # ── reading ────────────────────────────────────────────────────────────
@@ -109,6 +112,24 @@ class Settings:
             **({item_key: entry} if entry else {}),
         }
 
+    def set_in(self, name: str, key: str, value: Any) -> bool:
+        """One entry of a map field (`sources`, `alerts`, `placement`); `None` removes it."""
+        current = getattr(self, name, None)
+        if not isinstance(current, dict):
+            return False
+        changed = {k: v for k, v in current.items() if k != key}
+        if value is not None:
+            changed[key] = value
+        return self.assign(name, changed)
+
+    def change(self, edit: Callable[["Settings"], object], path: Path | None = None) -> bool:
+        """Read what another process may have written, edit, save — as one step, so a menu click never
+        saves this process's stale copy over the settings window's change."""
+        with self._lock:
+            self.reload_if_changed(path)
+            edit(self)
+            return self.save(path)
+
     def assign(self, name: str, value: Any) -> bool:
         """Set one field from outside — the settings window — only if the value has the field's shape."""
         if name not in {f.name for f in fields(Settings)}:
@@ -123,13 +144,18 @@ class Settings:
     # ── the file ───────────────────────────────────────────────────────────
 
     @staticmethod
-    def load(path: Path | None = None) -> "Settings":
+    def load(path: Path | None = None, strict: bool = False) -> "Settings":
+        """A missing file is the defaults. An unreadable one (locked for a moment by the other process
+        or an antivirus, half-written) is the defaults too — unless `strict`, which raises instead, so
+        a caller about to save never writes defaults over everything the owner set."""
         path = path or _path()
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
         except FileNotFoundError:
             return Settings()
         except (OSError, ValueError):
+            if strict:
+                raise
             log.exception("settings unreadable, using defaults")
             return Settings()
         settings = Settings()
@@ -158,23 +184,40 @@ class Settings:
             return False
         if mtime == self._mtime:
             return False
-        fresh = Settings.load(path)
-        for f in fields(Settings):
-            setattr(self, f.name, getattr(fresh, f.name))
-        self._mtime = mtime
+        with self._lock:
+            try:
+                fresh = Settings.load(path, strict=True)
+            except (OSError, ValueError):
+                log.warning("settings changed but unreadable for now; keeping the current ones")
+                return False  # _mtime unchanged: the next tick tries again
+            for f in fields(Settings):
+                setattr(self, f.name, getattr(fresh, f.name))
+            self._mtime = mtime
         return True
 
-    def save(self, path: Path | None = None) -> None:
+    def save(self, path: Path | None = None) -> bool:
+        """True when the file now holds these settings. A temp file of this process's own (two
+        processes write here), then an atomic replace, retried briefly while the other side has the
+        file open."""
         path = path or _path()
-        with self._lock:  # the menu and the settings window may save at the same moment
+        with self._lock:
             try:
                 path.parent.mkdir(parents=True, exist_ok=True)
-                temporary = path.with_suffix(".tmp")
+                temporary = path.with_name(f"settings.{os.getpid()}.tmp")
                 temporary.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
-                temporary.replace(path)  # atomic: a crash mid-write never leaves half a file
+                for attempt in range(5):
+                    try:
+                        temporary.replace(path)  # atomic: a crash mid-write never leaves half a file
+                        break
+                    except PermissionError:
+                        if attempt == 4:
+                            raise
+                        time.sleep(0.05)
                 self._mtime = path.stat().st_mtime_ns  # our own write is not news to reload
+                return True
             except OSError:
                 log.exception("could not save settings")
+                return False
 
 
 def _fits(default: Any, value: Any) -> bool:
