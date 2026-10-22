@@ -16,6 +16,7 @@ import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from juice_mate import folders, quit
 from juice_mate.core.alerts import NEWS, Alert, Alerts
@@ -26,8 +27,9 @@ from juice_mate.core.display import Item, items, metric_item
 from juice_mate.core.history import History
 from juice_mate.core.metric import Metric, Unit, short
 from juice_mate.core.reading import Kind, Reading, level
+from juice_mate.panel.menu import MenuEntry
 from juice_mate.settings import Settings
-from juice_mate.sources import Sensor, Source, poll_all
+from juice_mate.sources import Sensor, Source, news, poll_all
 from juice_mate.sources.bluetooth import Bluetooth
 from juice_mate.sources.claude import Claude
 from juice_mate.sources.claude_run import ClaudeRun, find_claude
@@ -81,6 +83,26 @@ def sensors() -> list[Sensor]:
         DiskSpeed("read"),
         DiskSpeed("write"),
     ]
+
+
+def recent_news() -> list[MenuEntry | None]:
+    """The menu's last five told stories; a click opens the article."""
+    entries: list[MenuEntry | None] = []
+    for story in news.recent(5):
+        label = story.text if len(story.text) <= 46 else story.text[:45].rstrip() + "…"
+        url = story.url
+        entries.append(MenuEntry(label, (lambda url=url: open_article(url)) if url else None, icon=ICONS["article"]))  # type: ignore[misc]
+    return entries
+
+
+def open_article(url: str) -> None:
+    """Only https links to the news feeds' own sites: the answer of a language model must not be
+    able to make Juice-Mate open whatever it writes."""
+    host = urlsplit(url).hostname or ""
+    if urlsplit(url).scheme != "https" or not any(host == d or host.endswith("." + d) for d in news.SITES):
+        log.warning("not opening %s: not a news site", url)
+        return
+    threading.Thread(target=lambda: os.startfile(url), name="open", daemon=True).start()  # noqa: S606
 
 
 def open_target(key: str) -> None:
@@ -148,6 +170,8 @@ ICONS = {
     "update": chr(0xE896),
     "bluetooth": chr(0xE702),
     "hator": chr(0xE962),
+    "news": chr(0xE789),  # a newspaper, roughly: the Fluent "Reading list"
+    "article": chr(0xE8A7),  # open in a new window
 }
 
 
@@ -201,7 +225,6 @@ def local_clock(t: float) -> str:
 
 
 def run() -> None:
-    from juice_mate.panel.menu import MenuEntry
     from juice_mate.panel.window import Panel
     from juice_mate.tray.toasts import Toasts
     from juice_mate.ui.settings_app import Entry, write_items
@@ -212,7 +235,7 @@ def run() -> None:
     updater = Updater()
     settings = Settings.load()
     catalog = sensors()
-    claude_run = ClaudeRun(lambda: settings.claude_prompt)
+    claude_run = ClaudeRun(lambda: settings.claude_prompt, topics=lambda: settings.topic_words())
     # By the names of settings.SOURCES: a source switched off is not polled at all.
     named: dict[str, Source] = {
         "claude": Claude(run=claude_run, keep_window=lambda: settings.keep_claude_window),
@@ -304,6 +327,7 @@ def run() -> None:
             None,
             MenuEntry("Show", children=shown, icon=ICONS["show"]),
             MenuEntry("Sources", children=on, icon=ICONS["sources"]),
+            *([MenuEntry("Recent news", children=recent_news(), icon=ICONS["news"])] if news.recent(1) else []),
             MenuEntry("Refresh now", refresh_now, icon=ICONS["refresh"]),
             *([MenuEntry("Ask Claude now", ask_now, icon=ICONS["claude"])] if claude and find_claude() else []),
             *(
@@ -372,8 +396,13 @@ def run() -> None:
                 if settings.alert_on(alert.kind):
                     toasts.show(alert)
         reply = claude_run.take_reply()
-        if reply and settings.alert_on(NEWS):
-            toasts.show(Alert("claude:run", "Claude", reply, NEWS))
+        if reply is not None and reply.news:
+            news.remember(reply.stories, time.time())
+        if reply is not None and settings.alert_on(NEWS):
+            if reply.news:
+                toasts.show_news(reply.stories)
+            else:
+                toasts.show(Alert("claude:run", "Claude", reply.text, NEWS))
         if settings.reload_if_changed():  # the settings window saved something
             batteries_due = 0.0
             continue

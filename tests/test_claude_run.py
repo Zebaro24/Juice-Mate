@@ -1,7 +1,11 @@
 import subprocess
+from datetime import UTC, datetime
 from typing import Any
 
 from juice_mate.sources.claude_run import PING_EVERY, QUIET_PROMPT, ClaudeRun
+from juice_mate.sources.news import Headline
+
+HEADLINE = Headline("X", "Y", "https://techcrunch.com/y", datetime(2026, 10, 22, tzinfo=UTC))
 
 
 class Runner:
@@ -30,7 +34,8 @@ def test_runs_claude_code_on_haiku_without_tools_and_hands_over_the_answer_once(
     assert args[args.index("--model") + 1] == "haiku"
     assert args[args.index("--tools") + 1] == ""
     assert run.finished == 1
-    assert run.take_reply() == "Octopuses have three hearts."
+    reply = run.take_reply()
+    assert reply is not None and reply.text == "Octopuses have three hearts." and not reply.news
     assert run.take_reply() is None
 
 
@@ -67,14 +72,14 @@ def test_no_claude_code_on_this_pc_means_no_run() -> None:
 
 def test_news_in_the_prompt_becomes_headlines() -> None:
     runner = Runner()
-    run = ClaudeRun(lambda: "News:\n{news}", runner, exe=lambda: "claude", background=False, news=lambda: "- [X] Y")
+    run = ClaudeRun(lambda: "News:\n{news}", runner, exe=lambda: "claude", background=False, news=lambda: [HEADLINE])
     run.request("idle window")
-    assert runner.calls[0][2] == "News:\n- [X] Y"
+    assert runner.calls[0][2] == "News:\n[1] [X] Y"
 
 
 def test_no_headlines_renews_silently() -> None:
     runner = Runner()
-    run = ClaudeRun(lambda: "News:\n{news}", runner, exe=lambda: "claude", background=False, news=lambda: "")
+    run = ClaudeRun(lambda: "News:\n{news}", runner, exe=lambda: "claude", background=False, news=lambda: [])
     run.request("idle window")
     assert runner.calls[0][2] == QUIET_PROMPT
     assert run.take_reply() is None
@@ -96,9 +101,26 @@ def test_a_news_prompt_asks_for_other_stories_than_last_time() -> None:
         exe=lambda: "claude",
         clock=lambda: now[0],
         background=False,
-        news=lambda: "- [X] Y",
+        news=lambda: [HEADLINE],
     )
     run.request("menu", now_please=True)
     run.request("menu", now_please=True)
     assert "Already told" not in runner.calls[0][2]
     assert runner.calls[1][2].endswith("Already told — pick other stories:\niPhone 18 is out")
+
+
+def test_a_news_answer_knows_its_articles_and_the_topics_steer_it() -> None:
+    runner = Runner(stdout="📱 Y happened #1")
+    run = ClaudeRun(
+        lambda: "News:\n{news}",
+        runner,
+        exe=lambda: "claude",
+        background=False,
+        news=lambda: [HEADLINE],
+        topics=lambda: ["AI models and tools"],
+    )
+    run.request("menu", now_please=True)
+    assert "Prefer stories about: AI models and tools." in runner.calls[0][2]
+    reply = run.take_reply()
+    assert reply is not None and reply.news
+    assert [(s.text, s.url, s.source) for s in reply.stories] == [("📱 Y happened", "https://techcrunch.com/y", "X")]

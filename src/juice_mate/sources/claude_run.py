@@ -15,10 +15,12 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 from juice_mate import folders
-from juice_mate.sources.news import headlines
+from juice_mate.core.news import Story, stories
+from juice_mate.sources.news import Headline, fetch, numbered
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +62,18 @@ def command(exe: str, prompt: str) -> list[str]:
     ]
 
 
+@dataclass(frozen=True)
+class Reply:
+    """The answer, line by line; for a news prompt each line knows its article."""
+
+    stories: list[Story]
+    news: bool
+
+    @property
+    def text(self) -> str:
+        return "\n".join(s.text for s in self.stories)
+
+
 class ClaudeRun:
     def __init__(
         self,
@@ -68,19 +82,22 @@ class ClaudeRun:
         exe: Callable[[], str | None] = find_claude,
         clock: Callable[[], float] = time.time,
         background: bool = True,
-        news: Callable[[], str] = headlines,
+        news: Callable[[], list[Headline]] = fetch,
+        topics: Callable[[], list[str]] = lambda: [],
     ) -> None:
         """`prompt` is asked at each run, so a change in the settings takes effect without a restart.
-        A `{news}` in it becomes the last day's tech headlines (news.py)."""
+        A `{news}` in it becomes the last day's tech headlines (news.py), numbered so the answer can
+        point at its articles; `topics` (the owner's picks, in words) steer which stories it picks."""
         self._prompt = prompt
         self._news = news
+        self._topics = topics
         self._run = run
         self._exe = exe
         self._clock = clock
         self._background = background
         self._next = 0.0
         self._busy = False
-        self._reply: str | None = None
+        self._reply: Reply | None = None
         self._told: list[str] = []  # the last answers to a `{news}` prompt, so the next one differs
         self.finished = 0  # counts finished runs: a new value means "ask for the usage again now"
 
@@ -99,7 +116,7 @@ class ClaudeRun:
         else:
             self._go(exe)
 
-    def take_reply(self) -> str | None:
+    def take_reply(self) -> "Reply | None":
         """The answer of the last run, once; None when there is none to show."""
         reply, self._reply = self._reply, None
         return reply
@@ -108,9 +125,14 @@ class ClaudeRun:
         folder = folders.data()
         try:
             prompt = self._prompt().strip()
+            links: list[tuple[str, str | None]] = []
             if NEWS in prompt:
                 news = self._news()
-                prompt = prompt.replace(NEWS, news) if news else ""  # no headlines: renew silently
+                links = [(h.source, h.url) for h in news]
+                prompt = prompt.replace(NEWS, numbered(news)) if news else ""  # no headlines: renew silently
+                topics = self._topics()
+                if prompt and topics:
+                    prompt += "\n\nPrefer stories about: " + ", ".join(topics) + "."
                 if prompt and self._told:
                     # The day's headlines barely change, so the same two stories would win every time.
                     prompt += "\n\nAlready told — pick other stories:\n" + "\n".join(self._told)
@@ -128,8 +150,9 @@ class ClaudeRun:
             if done.returncode != 0:
                 log.warning("Claude Code run failed (%s): %s", done.returncode, (done.stderr or done.stdout)[:300])
             elif prompt and done.stdout.strip():
-                self._reply = done.stdout.strip()
-                self._told = (self._told + [self._reply])[-TOLD_KEPT:]
+                reply = Reply(stories(done.stdout.strip(), links), bool(links))
+                self._reply = reply
+                self._told = (self._told + [reply.text])[-TOLD_KEPT:]
         except Exception:  # whatever happens, the run must end and free the next one
             log.exception("could not run Claude Code")
         finally:

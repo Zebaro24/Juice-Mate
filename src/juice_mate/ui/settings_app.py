@@ -25,7 +25,7 @@ from juice_mate import folders, quit
 from juice_mate.core.arrange import PLACES, default_place
 from juice_mate.core.display import GLYPHS, SENSOR_GLYPHS
 from juice_mate.core.reading import Kind
-from juice_mate.settings import DEFAULT_PROMPT, Settings
+from juice_mate.settings import DEFAULT_PROMPT, NEWS_TOPICS, Settings
 
 log = logging.getLogger(__name__)
 
@@ -117,6 +117,7 @@ class Api:
             "accent": accent(),
             "version": updater.version(),
             "default_prompt": DEFAULT_PROMPT,
+            "topics": NEWS_TOPICS,
         }
 
     # Every change: the file as it is now (strict: an unreadable file is not "defaults"), one field or

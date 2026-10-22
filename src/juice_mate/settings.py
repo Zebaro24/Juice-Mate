@@ -40,9 +40,28 @@ NEWS_PROMPT = (
     "Pick the two that matter most to an ordinary tech user: a new device and what it can do, a new AI "
     "model, a major launch, release or deal. Skip politics, lawsuits, deals of the day and opinion "
     "pieces. For each, one line in Russian, at most 20 words: what happened and why it is interesting. "
-    "Start each line with an emoji. No intro, no links, nothing else."
+    "Start each line with an emoji and end it with its headline's number, like #7. No intro, no links, "
+    "nothing else."
 )
+# News topics the owner can pick (settings window); all picked, or none, is no preference.
+NEWS_TOPICS = {
+    "ai": "AI models and tools",
+    "devices": "phones, laptops and gadgets",
+    "gaming": "games and consoles",
+    "software": "apps and operating systems",
+    "science": "science and space",
+    "business": "big tech companies and deals",
+}
 DEFAULT_PROMPT = NEWS_PROMPT
+# Earlier defaults, as saved by earlier versions: still the default in spirit, so they move to the
+# current one (0.3.x's prompt did not ask for headline numbers, so its news had no links).
+OLD_DEFAULT_PROMPTS = {
+    "Tech news headlines from the last 24 hours:\n{news}\n\n"
+    "Pick the two that matter most to an ordinary tech user: a new device and what it can do, a new AI "
+    "model, a major launch, release or deal. Skip politics, lawsuits, deals of the day and opinion "
+    "pieces. For each, one line in Russian, at most 20 words: what happened and why it is interesting. "
+    "Start each line with an emoji. No intro, no links, nothing else.",
+}
 
 
 def _path() -> Path:
@@ -70,6 +89,7 @@ class Settings:
     # the account's quota, and the second PC's user never asked for it.
     keep_claude_window: bool = False
     claude_prompt: str = DEFAULT_PROMPT
+    news_topics: list[str] = field(default_factory=lambda: list(NEWS_TOPICS))
 
     def __post_init__(self) -> None:
         self._lock = threading.RLock()  # the poll loop reloads, the menu changes: one at a time
@@ -82,6 +102,11 @@ class Settings:
 
     def alert_on(self, kind: str) -> bool:
         return self.alerts.get(kind, True)
+
+    def topic_words(self) -> list[str]:
+        """What the news prompt is told to prefer; nothing when every topic, or none, is picked."""
+        picked = [NEWS_TOPICS[t] for t in self.news_topics if t in NEWS_TOPICS]
+        return [] if len(picked) in (0, len(NEWS_TOPICS)) else picked
 
     def device_prefs(self) -> dict[str, DevicePref]:
         prefs = {}
@@ -166,6 +191,8 @@ class Settings:
                 setattr(settings, f.name, _merged(getattr(settings, f.name), raw[f.name]))
             elif f.name in raw:
                 log.warning("settings: %s ignored, not a %s", f.name, type(getattr(settings, f.name)).__name__)
+        if settings.claude_prompt in OLD_DEFAULT_PROMPTS:
+            settings.claude_prompt = DEFAULT_PROMPT
         settings._clean()
         with contextlib.suppress(OSError):
             settings._mtime = path.stat().st_mtime_ns

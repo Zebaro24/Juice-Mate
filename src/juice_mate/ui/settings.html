@@ -167,6 +167,9 @@ textarea { height: 120px; width: 100%; padding: 10px 12px; resize: vertical; lin
 .icons button.on { color: var(--signal); border-color: #3ee6e480; background: var(--signal-soft); }
 .icons .auto { width: auto; padding: 0 12px; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
 .moving { transition: transform var(--calm) var(--ease); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { height: 32px; border-radius: 16px; padding: 0 14px; font-size: 13px; color: var(--mist); }
+.chip.on { color: var(--signal); border-color: #3ee6e480; background: var(--signal-soft); }
 
 #saved {
   position: fixed; right: 26px; bottom: 22px; z-index: 5; padding: 9px 14px; border-radius: 10px; background: var(--raised);
@@ -182,7 +185,11 @@ textarea { height: 120px; width: 100%; padding: 10px 12px; resize: vertical; lin
 @keyframes slosh { 50% { transform: translateX(-6px); } }
 .hint { color: var(--mist); font-size: 12.5px; }
 /* ── our own title bar: Windows' caption buttons are not ours to restyle ── */
-.titlebar { position: fixed; top: 0; left: 248px; right: 150px; height: 44px; z-index: 4; }
+/* Solid at the top, fading out below: content scrolls away under it, never under the buttons. */
+.titlebar {
+  position: fixed; top: 0; left: 248px; right: 10px; height: 50px; z-index: 4;
+  background: linear-gradient(var(--night) 72%, transparent);
+}
 .navdrag { position: absolute; top: 0; left: 0; right: 0; height: 18px; }
 .caption { position: fixed; top: 8px; right: 10px; z-index: 6; display: flex; gap: 4px; align-items: center; }
 .caption button {
@@ -408,6 +415,22 @@ function renderGeneral() {
   save.onclick = () => assign("claude_prompt", area.value.trim());
   reset.onclick = () => { area.value = S.default_prompt; assign("claude_prompt", area.value); };
 
+  // Topic chips: each one on or off; the whole small list is this window's alone to change.
+  const topics = el(`<div class="chips"></div>`);
+  for (const [key, label] of Object.entries(S.topics)) {
+    const chip = el(`<button class="chip">${esc(label)}</button>`);
+    const paint = () => chip.classList.toggle("on", S.settings.news_topics.includes(key));
+    chip.onclick = () => {
+      const now = S.settings.news_topics.includes(key)
+        ? S.settings.news_topics.filter((t) => t !== key)
+        : [...S.settings.news_topics, key];
+      assign("news_topics", now);
+      paint();
+    };
+    paint();
+    topics.append(chip);
+  }
+
   const claude = document.getElementById("claude");
   claude.replaceChildren(
     card("&#xE917;", "Show when each limit resets", "5h 45% →16:00   ·   7d 66% →26.10",
@@ -416,6 +439,7 @@ function renderGeneral() {
       toggle(s.claude_left, (on) => assign("claude_left", on))),
     card("&#xE768;", "Keep the 5-hour window running", "When a window ends, Claude Code runs once to start the next and tell you the day's tech news",
       toggle(s.keep_claude_window, (on) => assign("keep_claude_window", on))),
+    expander("&#xE789;", "News topics", "Which stories the news prefers — all or none means no preference", [topics]),
     expander("&#xE8F2;", "Question for Claude", "What the quiet Claude Code run asks; the answer comes as a notification", [prompt]),
   );
   stagger(claude);

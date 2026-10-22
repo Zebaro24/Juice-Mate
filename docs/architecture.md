@@ -71,7 +71,16 @@ A failing source returns an error reading, never raises into the poll loop.
   renews silently. `{news}` in the prompt becomes the last day's headlines from The Verge, TechCrunch
   and Engadget RSS (`sources/news.py`, fetched by Juice-Mate: ~1k tokens, where a web search by
   Claude Code would cost thousands). The default (owner, 2026-10-22): the two tech stories that matter
-  most to an ordinary user — a new device, a new AI model, a launch — one Russian line each. One run costs a fraction of a percent of the window.
+  most to an ordinary user — a new device, a new AI model, a launch — one Russian line each.
+- **News with links** (owner, 2026-10-22): the headlines go into the prompt numbered
+  (`[7] [The Verge] …`) and each answer line ends with its number (`… #7`); `core/news.py` ties the
+  lines back to their articles. The notification gets a "Read · source" button per story and opens
+  the first article when clicked; the menu's **Recent news** lists the last five
+  (`news.json` in the data folder, thirty kept). Only `https` links to the three feeds' own sites
+  are ever opened (`app.open_article`): the answer of a language model must not choose what opens.
+- **Topics** (`news_topics`, the settings window's chips): AI, devices, games, software, science,
+  business; a partial pick adds "Prefer stories about: …" to the prompt. Saved prompts equal to an
+  earlier default move to the current one on load (`OLD_DEFAULT_PROMPTS`). One run costs a fraction of a percent of the window.
 - Request (confirmed 2026-10-21): `GET https://api.anthropic.com/api/oauth/usage`, headers
   `Authorization: Bearer <accessToken>` and `anthropic-beta: oauth-2025-04-20` → `five_hour` and
   `seven_day`, each `{utilization: % used, resets_at: ISO time}`. The answer also carries a dozen

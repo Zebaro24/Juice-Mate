@@ -11,6 +11,7 @@ import winreg
 import windows_toasts as wt
 
 from juice_mate.core.alerts import Alert
+from juice_mate.core.news import Story
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +33,22 @@ class Toasts:
             self._toaster = wt.InteractableWindowsToaster(DISPLAY_NAME, AUMID)
         except Exception:
             log.exception("toasts unavailable")
+
+    def show_news(self, stories: list[Story]) -> None:
+        """The day's tech news: one line per story, a "Read" button per story that has its article;
+        clicking the notification itself opens the first one."""
+        if self._toaster is None or not stories:
+            return
+        linked = [s for s in stories if s.url]
+        try:
+            toast = wt.Toast(
+                ["Tech news", *(s.text for s in stories[:2])],
+                launch_action=linked[0].url if linked else None,
+                actions=[wt.ToastButton(f"Read · {s.source or 'article'}", launch=s.url) for s in linked[:2]],
+            )
+            self._toaster.show_toast(toast)
+        except Exception:
+            log.exception("news toast failed")
 
     def show(self, alert: Alert) -> None:
         if self._toaster is None:
