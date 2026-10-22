@@ -4,10 +4,13 @@ Everything the menu and the settings window change lives here (docs/architecture
 or broken file means the defaults; a broken field means that field's default — the app must start on
 a clean PC (the second one) without anyone writing a config, and one bad value must not cost the rest.
 
-The object is shared: the poll loop reads it every tick, the menu and the settings window change it.
-Fields are replaced whole (never mutated in place by readers), so a reader sees one value or the other.
+The object is shared: the poll loop reads it every tick, the menu changes it. The settings window is
+another process (ui/settings_app.py) that writes the same file; the poll loop picks that up with
+`reload_if_changed()`. Fields are replaced whole, never mutated in place, so a reader sees one value
+or the other.
 """
 
+import contextlib
 import json
 import logging
 import threading
@@ -67,6 +70,7 @@ class Settings:
 
     def __post_init__(self) -> None:
         self._lock = threading.Lock()
+        self._mtime: int | None = None  # the file as last read or written by this process
 
     # ── reading ────────────────────────────────────────────────────────────
 
@@ -105,6 +109,17 @@ class Settings:
             **({item_key: entry} if entry else {}),
         }
 
+    def assign(self, name: str, value: Any) -> bool:
+        """Set one field from outside — the settings window — only if the value has the field's shape."""
+        if name not in {f.name for f in fields(Settings)}:
+            return False
+        default = getattr(Settings(), name)
+        if not _fits(default, value):
+            return False
+        setattr(self, name, _merged(default, value))
+        self._clean()
+        return True
+
     # ── the file ───────────────────────────────────────────────────────────
 
     @staticmethod
@@ -125,9 +140,29 @@ class Settings:
                 setattr(settings, f.name, _merged(getattr(settings, f.name), raw[f.name]))
             elif f.name in raw:
                 log.warning("settings: %s ignored, not a %s", f.name, type(getattr(settings, f.name)).__name__)
-        settings.placement = {k: v for k, v in settings.placement.items() if v in PLACES}
-        settings.devices = {k: v for k, v in settings.devices.items() if isinstance(v, dict)}
+        settings._clean()
+        with contextlib.suppress(OSError):
+            settings._mtime = path.stat().st_mtime_ns
         return settings
+
+    def _clean(self) -> None:
+        self.placement = {k: v for k, v in self.placement.items() if v in PLACES}
+        self.devices = {k: v for k, v in self.devices.items() if isinstance(v, dict)}
+
+    def reload_if_changed(self, path: Path | None = None) -> bool:
+        """Take what another process (the settings window) wrote; True when anything was read."""
+        path = path or _path()
+        try:
+            mtime = path.stat().st_mtime_ns
+        except OSError:
+            return False
+        if mtime == self._mtime:
+            return False
+        fresh = Settings.load(path)
+        for f in fields(Settings):
+            setattr(self, f.name, getattr(fresh, f.name))
+        self._mtime = mtime
+        return True
 
     def save(self, path: Path | None = None) -> None:
         path = path or _path()
@@ -137,6 +172,7 @@ class Settings:
                 temporary = path.with_suffix(".tmp")
                 temporary.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
                 temporary.replace(path)  # atomic: a crash mid-write never leaves half a file
+                self._mtime = path.stat().st_mtime_ns  # our own write is not news to reload
             except OSError:
                 log.exception("could not save settings")
 

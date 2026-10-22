@@ -8,18 +8,19 @@ import argparse
 import ctypes
 import logging
 import os
+import subprocess
 import sys
 import threading
 import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
-from juice_mate import folders
+from juice_mate import folders, quit
 from juice_mate.core.alerts import NEWS, Alert, Alerts
 from juice_mate.core.arrange import LEFT, RIGHT, SECOND_LEFT, SECOND_RIGHT, arrange, personalise
 from juice_mate.core.display import Item, items, metric_item
 from juice_mate.core.metric import Metric, Unit, short
-from juice_mate.core.reading import Reading, level
+from juice_mate.core.reading import Kind, Reading, level
 from juice_mate.settings import Settings
 from juice_mate.sources import Sensor, Source, poll_all
 from juice_mate.sources.bluetooth import Bluetooth
@@ -44,6 +45,7 @@ log = logging.getLogger("juice_mate")
 TICK_SECONDS = 2  # system sensors, like TrafficMonitor's one-second-ish refresh
 BATTERY_SECONDS = 30  # batteries move slowly; Bluetooth enumeration is not free
 _ERROR_ALREADY_EXISTS = 183
+_DETACHED = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
 
 # Where a left click on an item takes you, by the item key's source.
 CLICK_TARGETS = {
@@ -108,10 +110,10 @@ def dump() -> None:
         print(f"  {m.name:<32} {short(m):>6} {unit:<3}  {m.error or ''}")
 
 
-def _log_to_file() -> None:
+def _log_to_file(name: str = "juice-mate.log") -> None:
     folder = folders.data()
     folder.mkdir(parents=True, exist_ok=True)
-    handler = RotatingFileHandler(folder / "juice-mate.log", maxBytes=512_000, backupCount=1, encoding="utf-8")
+    handler = RotatingFileHandler(folder / name, maxBytes=512_000, backupCount=1, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     logging.basicConfig(level=logging.INFO, handlers=[handler])
     sys.excepthook = lambda kind, value, tb: log.critical("unhandled", exc_info=(kind, value, tb))
@@ -148,6 +150,7 @@ def panel_items(
 def run() -> None:
     from juice_mate.panel.window import MenuEntry, Panel
     from juice_mate.tray.toasts import Toasts
+    from juice_mate.ui.settings_app import Entry, write_items
     from juice_mate.update import autostart
     from juice_mate.update.updater import Updater
 
@@ -192,6 +195,24 @@ def run() -> None:
         settings.keep_claude_window = not settings.keep_claude_window
         settings.save()
 
+    seen: dict[str, Entry] = {}  # everything that ever reported, for the settings window's list
+
+    def remember(readings: list[Reading]) -> None:
+        """New devices go to items.json, the settings window's list of what can be on the panel."""
+        before = dict(seen)
+        for r in readings:
+            group = "usage" if r.kind is Kind.CLAUDE else "device"
+            seen[f"{r.source}:{r.device_id}"] = Entry(f"{r.source}:{r.device_id}", r.name, group, r.kind.value)
+        if seen != before:
+            write_items([*seen.values(), *(Entry(f"system:{s.sensor}", s.name, "sensor") for s in catalog)])
+
+    def open_settings() -> None:
+        """The window is a process of its own (ui/settings_app.py); it returns at once."""
+        try:
+            subprocess.Popen([*autostart.launch(), "--settings"], creationflags=_DETACHED)  # noqa: S603
+        except OSError:
+            log.exception("could not open the settings window")
+
     def ask_now() -> None:
         claude_run.request("asked from the menu", now_please=True)  # a thread of its own: returns at once
 
@@ -209,6 +230,8 @@ def run() -> None:
         claude = settings.source_on("claude")
         return [
             *update,
+            MenuEntry("Settings…", open_settings),
+            None,
             MenuEntry("Show", children=shown),
             MenuEntry("Sources", children=on),
             MenuEntry("Refresh now", refresh_now),
@@ -235,6 +258,7 @@ def run() -> None:
         TrayIcons(sources).run()
         return
     log.info("panel attached")
+    quit.listen(quit_app)  # the settings window's power button
     updater.start()
     alerts, toasts = Alerts(), Toasts()
     readings: list[Reading] = []
@@ -244,6 +268,7 @@ def run() -> None:
         if now >= batteries_due or refresh.is_set():
             refresh.clear()
             readings = poll_all([source for name, source in named.items() if settings.source_on(name)])
+            remember(readings)
             batteries_due = now + BATTERY_SECONDS
             for alert in alerts.check(readings, settings.battery_alert):
                 if settings.alert_on(alert.kind):
@@ -251,6 +276,9 @@ def run() -> None:
         reply = claude_run.take_reply()
         if reply and settings.alert_on(NEWS):
             toasts.show(Alert("claude:run", "Claude", reply, NEWS))
+        if settings.reload_if_changed():  # the settings window saved something
+            batteries_due = 0.0
+            continue
         moment = datetime.now()
         metrics = [s.read() for s in catalog if s.sensor in settings.sensors]
         places = panel_items(readings, metrics, settings, moment)
@@ -269,6 +297,8 @@ def main() -> None:
     startup()
     parser = argparse.ArgumentParser(prog="juice_mate")
     parser.add_argument("--dump", action="store_true", help="print every reading once and exit")
+    parser.add_argument("--settings", action="store_true", help="open the settings window")
+    parser.add_argument("--debug", action="store_true", help="with --settings: the page's developer tools")
     args = parser.parse_args()
     for stream in (sys.stdout, sys.stderr):
         # A windowed build (pythonw, PyInstaller --windowed) has no console: the streams are None.
@@ -276,6 +306,12 @@ def main() -> None:
             stream.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     if args.dump:
         dump()
+        return
+    if args.settings:
+        from juice_mate.ui import settings_app
+
+        _log_to_file("settings.log")  # its own file: two processes must not rotate one log
+        settings_app.run()
         return
     _log_to_file()
     folders.migrate()

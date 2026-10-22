@@ -26,6 +26,16 @@ def installed() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def version() -> str:
+    """The installed version, as Velopack knows it; "dev" for a checkout or a build run from dist/."""
+    if installed():
+        try:
+            return str(velopack.UpdateManager(velopack.GithubSource(REPO)).get_current_version())
+        except Exception as e:  # not installed through Setup.exe
+            log.info("no installed version: %s", e)
+    return "dev"
+
+
 def startup() -> None:
     if not installed():
         return

@@ -23,7 +23,7 @@ Ordered by dependency. ✅ done · ⚠️ written, not verified on the real targ
 | 10 | Settings model: sources on/off (Sources menu), device name / hide / order / icon, thresholds and per-kind notification switches, per-item placement — all in settings.json, read live | ✅ |
 | 11 | Claude display: `5h 45% →16:00`, `7d 66% →26.10` (reset time, switchable), used or left | ✅ |
 | 12 | New sensors, nothing to install: ping with "offline", RAM and VRAM in GB | ✅ |
-| 13 | Settings window (tkinter + sv-ttk, Windows 11 look): everything of step 10 without editing JSON, icon picker for devices | |
+| 13 | Settings window (WebView2, Juice-Mate's own dark look): everything of step 10 without editing JSON, icon picker for devices, own title bar with minimize / close / quit everything | ✅ · ⚠️ not yet in an installed build |
 | 14 | Popup on click: every reading, reset times, mini charts of the last hour | |
 | 15 | News: buttons that open the articles, topics, recent news in the menu | |
 | 16 | Second monitor: strips on `Shell_SecondaryTrayWnd`, each item placed main / second, left / right | |

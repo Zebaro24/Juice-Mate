@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
-"""Draw the Juice-Mate logo: an upright battery filled with juice, a mate leaf on its cap.
+"""The Juice-Mate logo: an upright battery filled with juice, a mate leaf on its cap.
 
-    poetry run python scripts/logo.py            # writes docs/logo.png (the README's)
-    scripts/build.py calls icon() for the exe's .ico
+    poetry run python -m juice_mate.logo         # writes docs/logo.png (the README's)
+    scripts/build.py calls icon() for the exe's .ico; the settings window for its own
 
 Drawn in code, not kept as artwork: one source for every size. Drawn at 4× and scaled down.
 """
@@ -13,7 +12,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]  # the checkout, for docs/logo.png
 S = 4  # supersampling
 BASE = 256  # design grid
 

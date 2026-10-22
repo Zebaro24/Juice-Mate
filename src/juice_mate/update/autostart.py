@@ -13,11 +13,15 @@ RUN_KEY = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
 NAME = "JuiceMate"
 
 
-def command() -> str:
+def launch() -> list[str]:
+    """How to start Juice-Mate again: the installed exe, or this environment's pythonw in a checkout."""
     if getattr(sys, "frozen", False):
-        return f'"{sys.executable}"'
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    return f'"{pythonw}" -m juice_mate'
+        return [sys.executable]
+    return [str(Path(sys.executable).with_name("pythonw.exe")), "-m", "juice_mate"]
+
+
+def command() -> str:
+    return " ".join(f'"{part}"' if " " in part or part.endswith(".exe") else part for part in launch())
 
 
 def is_enabled() -> bool:

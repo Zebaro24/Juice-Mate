@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Juice-Mate settings</title>
+<style>
+/*
+ * Juice-Mate's own look (owner, 2026-10-22): dark, quiet, a distant cousin of zebaro.dev — its night
+ * navy, one cyan signal for what is on and focused, magenta only for what is red on the panel, the
+ * same calm easing. Not the site itself: muted, no glow fields, no display type. docs/architecture.md §6a.
+ */
+:root {
+  --night: #0a0a19;
+  --surface: #11112a;
+  --raised: #171734;
+  --raised-2: #1d1d3f;
+  --line: #23234a;
+  --line-2: #2e2e5c;
+  --paper: #eceef7;
+  --mist: #9b9eba;
+  --dim: #6c6f8f;
+  --signal: #3ee6e4;
+  --signal-soft: #3ee6e41f;
+  --pulse: #ff3d6a;
+  --ease: cubic-bezier(.22, 1, .36, 1);
+  --quick: 180ms;
+  --calm: 420ms;
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--night); color: var(--paper); font: 14px/20px var(--sans);
+  display: flex; overflow: hidden; -webkit-user-select: none; user-select: none; -webkit-font-smoothing: antialiased;
+}
+/* A faint wash in one corner — the site's floor glow, turned almost all the way down. */
+body::before {
+  content: ""; position: fixed; inset: auto -20% -40% auto; width: 70vw; height: 70vh; pointer-events: none;
+  background: radial-gradient(closest-side, #3ee6e40d, transparent); z-index: 0;
+}
+.icon { font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets"; font-style: normal; font-size: 16px; line-height: 1; }
+.spark { font-family: "Segoe UI Symbol"; }
+.data { font: 500 11px/14px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 4px; }
+
+/* ── navigation ─────────────────────────────────────────────────────── */
+nav {
+  width: 248px; flex: none; padding: 18px 12px; display: flex; flex-direction: column; position: relative; z-index: 1;
+  border-right: 1px solid var(--line); background: linear-gradient(180deg, var(--surface), var(--night));
+}
+.app { display: flex; align-items: center; gap: 12px; padding: 4px 8px 22px; }
+.app svg { width: 34px; height: 34px; flex: none; }
+.app b { font: 600 15px/18px var(--display); display: block; letter-spacing: -.01em; }
+.navlist { position: relative; display: flex; flex-direction: column; gap: 2px; }
+.navitem {
+  position: relative; display: flex; align-items: center; gap: 12px; height: 38px; padding: 0 12px; border-radius: 8px;
+  color: var(--mist); cursor: default; transition: color var(--quick), background var(--quick);
+}
+.navitem:hover { color: var(--paper); background: #ffffff08; }
+.navitem.active { color: var(--paper); }
+.navitem .icon { font-size: 15px; }
+.glider {
+  position: absolute; left: 0; right: 0; height: 38px; border-radius: 8px; background: var(--raised);
+  border: 1px solid var(--line-2); transition: transform var(--calm) var(--ease); pointer-events: none;
+}
+.glider::before {
+  content: ""; position: absolute; left: -1px; top: 11px; width: 2px; height: 14px; border-radius: 2px; background: var(--signal);
+  box-shadow: 0 0 10px var(--signal);
+}
+.navitem { z-index: 1; }
+.foot { margin-top: auto; padding: 12px 10px 0; }
+
+/* ── pages ──────────────────────────────────────────────────────────── */
+main { flex: 1; overflow-y: auto; padding: 30px 44px 48px 36px; position: relative; z-index: 1; }
+main::-webkit-scrollbar { width: 10px; }
+main::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 5px; border: 3px solid var(--night); }
+.eyebrow { margin-bottom: 6px; }
+h1 { font: 600 26px/32px var(--display); letter-spacing: -.02em; margin: 0 0 6px; }
+.lede { color: var(--mist); margin: 0 0 26px; max-width: 640px; }
+h2 { margin: 28px 0 10px; }
+.page { display: none; max-width: 860px; }
+.page.shown { display: block; animation: enter var(--calm) var(--ease) both; }
+@keyframes enter { from { opacity: 0; transform: translateY(12px); } }
+.stack > * { animation: rise 460ms var(--ease) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+
+/* ── cards ──────────────────────────────────────────────────────────── */
+.group { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.card { position: relative; transition: background var(--quick); }
+.card + .card { border-top: 1px solid var(--line); }
+.row { display: flex; align-items: center; gap: 16px; min-height: 64px; padding: 12px 18px; }
+.click > .row { cursor: default; }
+.click > .row:hover { background: #ffffff05; }
+.glyph {
+  width: 36px; height: 36px; border-radius: 9px; flex: none; display: grid; place-items: center; font-size: 17px;
+  background: var(--raised); border: 1px solid var(--line-2); color: var(--paper); transition: color var(--quick), border-color var(--quick);
+}
+.card.on .glyph { color: var(--signal); border-color: #3ee6e440; }
+.label { flex: 1; min-width: 0; }
+.label .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.label .sub { color: var(--mist); font-size: 12.5px; line-height: 17px; margin-top: 1px; }
+.right { display: flex; align-items: center; gap: 12px; color: var(--mist); }
+.chev { font-size: 11px; color: var(--mist); transition: transform var(--calm) var(--ease); }
+.card.open .chev { transform: rotate(180deg); }
+.body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--calm) var(--ease); }
+.card.open .body { grid-template-rows: 1fr; }
+.body > div { overflow: hidden; }
+.inner {
+  padding: 4px 18px 18px 70px; display: grid; gap: 14px; opacity: 0; transform: translateY(-4px);
+  transition: opacity var(--quick), transform var(--calm) var(--ease);
+}
+.card.open .inner { opacity: 1; transform: none; transition-delay: 60ms; }
+.line { display: flex; align-items: center; gap: 16px; min-height: 34px; flex-wrap: wrap; }
+.line > .data:first-child { width: 86px; flex: none; }
+
+/* ── toggle ─────────────────────────────────────────────────────────── */
+.toggle { display: inline-flex; align-items: center; gap: 10px; }
+.toggle input { display: none; }
+.toggle .state { font: 500 11px var(--mono); letter-spacing: .08em; color: var(--dim); width: 26px; text-align: right; transition: color var(--quick); }
+.track {
+  width: 42px; height: 24px; border-radius: 12px; background: var(--raised-2); border: 1px solid var(--line-2); position: relative;
+  transition: background var(--calm) var(--ease), border-color var(--quick), box-shadow var(--calm);
+}
+.knob {
+  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 8px; background: var(--mist);
+  transition: transform var(--calm) var(--ease), width var(--quick) var(--ease), background var(--quick);
+}
+.toggle:active .knob { width: 20px; }
+.toggle input:checked + .track { background: var(--signal-soft); border-color: #3ee6e466; box-shadow: 0 0 14px #3ee6e41a; }
+.toggle input:checked + .track .knob { transform: translateX(18px); background: var(--signal); }
+.toggle:active input:checked + .track .knob { transform: translateX(14px); }
+.toggle input:checked ~ .state, .toggle .state.on { color: var(--signal); }
+
+/* ── controls ───────────────────────────────────────────────────────── */
+button, select, input[type=text], input[type=number], textarea {
+  font: inherit; color: var(--paper); background: var(--raised); border: 1px solid var(--line-2); border-radius: 8px; outline: none;
+  transition: background var(--quick), border-color var(--quick), transform 90ms, box-shadow var(--quick);
+}
+button { height: 34px; padding: 0 14px; cursor: default; }
+button:hover, select:hover { background: var(--raised-2); border-color: #3a3a70; }
+button:active { transform: scale(.97); }
+button.primary { background: var(--signal-soft); border-color: #3ee6e455; color: var(--signal); }
+button.primary:hover { background: #3ee6e42e; }
+select {
+  height: 34px; padding: 0 34px 0 12px; min-width: 250px; appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--mist) 50%), linear-gradient(135deg, var(--mist) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 15px, calc(100% - 12px) 15px; background-size: 5px 5px; background-repeat: no-repeat;
+}
+select option { background: var(--surface); }
+input[type=text], input[type=number], textarea { height: 34px; padding: 0 12px; }
+input:focus, textarea:focus, select:focus { border-color: #3ee6e480; box-shadow: 0 0 0 3px #3ee6e414; }
+input[type=text] { width: 300px; }
+input::placeholder { color: var(--dim); }
+textarea { height: 120px; width: 100%; padding: 10px 12px; resize: vertical; line-height: 19px; font: 13px/19px var(--mono); -webkit-user-select: text; user-select: text; }
+.number { display: inline-flex; align-items: center; gap: 0; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; background: var(--raised); }
+.number input { width: 54px; text-align: center; border: 0; border-radius: 0; background: transparent; font: 500 14px var(--mono); }
+.number input::-webkit-inner-spin-button { display: none; }
+.number button { width: 32px; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--mist); }
+.number button:hover { color: var(--paper); background: #ffffff08; }
+.unit { font: 500 12px var(--mono); color: var(--dim); min-width: 52px; }
+
+.icons { display: flex; gap: 6px; flex-wrap: wrap; }
+.icons button { width: 42px; height: 38px; padding: 0; font-size: 17px; }
+.icons button.on { color: var(--signal); border-color: #3ee6e480; background: var(--signal-soft); }
+.icons .auto { width: auto; padding: 0 12px; font: 500 11px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+.moving { transition: transform var(--calm) var(--ease); }
+
+#saved {
+  position: fixed; right: 26px; bottom: 22px; z-index: 5; padding: 9px 14px; border-radius: 10px; background: var(--raised);
+  border: 1px solid var(--line-2); display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--mist);
+  transform: translateY(70px); opacity: 0; transition: transform var(--calm) var(--ease), opacity var(--quick);
+}
+#saved.on { transform: none; opacity: 1; }
+#saved .dot { width: 7px; height: 7px; border-radius: 4px; background: var(--signal); box-shadow: 0 0 8px var(--signal); }
+.hero { display: flex; gap: 22px; align-items: center; padding: 22px 18px; }
+.hero svg { width: 76px; height: 76px; animation: bob 5s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-4px) rotate(-2deg); } }
+.juice { animation: slosh 3.6s ease-in-out infinite; }
+@keyframes slosh { 50% { transform: translateX(-6px); } }
+.hint { color: var(--mist); font-size: 12.5px; }
+/* ── our own title bar: Windows' caption buttons are not ours to restyle ── */
+.titlebar { position: fixed; top: 0; left: 248px; right: 150px; height: 44px; z-index: 4; }
+.navdrag { position: absolute; top: 0; left: 0; right: 0; height: 18px; }
+.caption { position: fixed; top: 8px; right: 10px; z-index: 6; display: flex; gap: 4px; align-items: center; }
+.caption button {
+  height: 30px; min-width: 38px; padding: 0 10px; border: 1px solid transparent; background: transparent; color: var(--mist);
+  border-radius: 8px; display: inline-flex; align-items: center; gap: 8px; font-size: 13px;
+  transition: background var(--quick), color var(--quick), border-color var(--quick), min-width var(--calm) var(--ease), padding var(--calm) var(--ease);
+}
+.caption button .icon { font-size: 11px; }
+.caption button:hover { background: var(--raised); color: var(--paper); border-color: var(--line-2); }
+.caption .power:hover { color: var(--pulse); border-color: #ff3d6a55; background: #ff3d6a14; }
+.caption .power .ask { max-width: 0; overflow: hidden; white-space: nowrap; transition: max-width var(--calm) var(--ease); }
+.caption .power.armed { color: #fff; background: var(--pulse); border-color: var(--pulse); }
+.caption .power.armed .ask { max-width: 140px; }
+main { padding-top: 44px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="jg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd640"/><stop offset="1" stop-color="#ff801f"/></linearGradient>
+    <clipPath id="jc"><rect x="24" y="18" width="16" height="34" rx="3"/></clipPath>
+    <symbol id="logo" viewBox="0 0 64 64">
+      <rect x="2" y="2" width="60" height="60" rx="14" fill="#1c2134"/>
+      <rect x="27.5" y="11" width="9" height="5" rx="1.5" fill="#eef1f8"/>
+      <rect x="21" y="15" width="22" height="40" rx="5.5" fill="#eef1f8"/>
+      <rect x="24" y="18" width="16" height="34" rx="3" fill="#0c0f1a"/>
+      <g clip-path="url(#jc)"><path class="juice" d="M14 29 q5 -3 10 0 t10 0 t10 0 t10 0 V60 H14 Z" fill="url(#jg)"/></g>
+      <ellipse cx="45" cy="9" rx="8" ry="3.6" fill="#58c970" transform="rotate(-28 45 9)"/>
+    </symbol>
+  </defs>
+</svg>
+<div class="titlebar pywebview-drag-region"></div>
+<div class="caption">
+  <button id="minimize" title="Minimize"><i class="icon">&#xE921;</i></button>
+  <button id="close" title="Close this window — Juice-Mate keeps running"><i class="icon">&#xE8BB;</i></button>
+  <button id="power" class="power" title="Quit Juice-Mate"><i class="icon" style="font-size:13px">&#xE7E8;</i><span class="ask">Quit Juice-Mate?</span></button>
+</div>
+<nav>
+  <div class="navdrag pywebview-drag-region"></div>
+  <div class="app pywebview-drag-region">
+    <svg><use href="#logo"/></svg>
+    <div><b>Juice-Mate</b><span class="data" id="version"></span></div>
+  </div>
+  <div class="navlist" id="nav">
+    <div class="glider" id="glider"></div>
+    <div class="navitem active" data-page="general"><i class="icon">&#xE713;</i>General</div>
+    <div class="navitem" data-page="items"><i class="icon">&#xE8FD;</i>Panel items</div>
+    <div class="navitem" data-page="alerts"><i class="icon">&#xEA8F;</i>Alerts</div>
+    <div class="navitem" data-page="about"><i class="icon">&#xE946;</i>About</div>
+  </div>
+  <div class="foot data">Changes apply at once</div>
+</nav>
+
+<main id="main">
+  <section class="page shown" id="general">
+    <div class="data eyebrow">Settings</div>
+    <h1>General</h1>
+    <p class="lede">What Juice-Mate reads, when it starts, and how it shows your Claude limits.</p>
+    <h2 class="data">Sources</h2>
+    <div class="group stack" id="sources"></div>
+    <h2 class="data">Startup</h2>
+    <div class="group stack" id="startup"></div>
+    <h2 class="data">Claude</h2>
+    <div class="group stack" id="claude"></div>
+  </section>
+
+  <section class="page" id="items">
+    <div class="data eyebrow">Settings</div>
+    <h1>Panel items</h1>
+    <p class="lede">Everything that can be on the taskbar. Open one to rename it, give it another icon,
+      move it to the other end or the second monitor, or change its place in the row.</p>
+    <div id="itemgroups"></div>
+  </section>
+
+  <section class="page" id="alerts">
+    <div class="data eyebrow">Settings</div>
+    <h1>Alerts</h1>
+    <p class="lede">When a number turns red on the panel, and which notifications you get.</p>
+    <h2 class="data">Red on the panel</h2>
+    <div class="group stack" id="thresholds"></div>
+    <h2 class="data">Notifications</h2>
+    <div class="group stack" id="notify"></div>
+  </section>
+
+  <section class="page" id="about">
+    <div class="data eyebrow">Juice-Mate</div>
+    <h1>About</h1>
+    <p class="lede">Batteries, Claude limits and system sensors, on the taskbar itself. Updates itself.</p>
+    <div class="group">
+      <div class="card"><div class="hero"><svg><use href="#logo"/></svg>
+        <div><div style="font:600 20px/26px var(--display)">Juice-Mate</div><div class="data" id="version2" style="margin-top:4px"></div></div></div></div>
+      <div class="card click"><div class="row" id="project">
+        <div class="glyph"><i class="icon">&#xE774;</i></div>
+        <div class="label"><div class="title">Project page</div><div class="sub">github.com/Zebaro24/Juice-Mate</div></div>
+        <i class="icon chev" style="transform:rotate(-90deg)">&#xE70D;</i></div></div>
+    </div>
+  </section>
+</main>
+
+<div id="saved"><span class="dot"></span><span>Saved — the panel follows in a moment</span></div>
+
+<script>
+"use strict";
+let S = null;
+const api = () => window.pywebview.api;
+const PLACE = {
+  "left": "Taskbar, left end", "right": "Taskbar, by the clock",
+  "second-left": "Second monitor, left end", "second-right": "Second monitor, by the clock",
+};
+const KIND = { keyboard: "Keyboard", mouse: "Mouse", headset: "Headset", gamepad: "Game controller", phone: "Phone", other: "Other" };
+const GROUPS = [["usage", "Claude usage"], ["device", "Devices"], ["sensor", "System sensors"]];
+const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ── saving ───────────────────────────────────────────────────────── */
+let savedTimer = 0;
+function saved() {
+  const box = document.getElementById("saved");
+  box.classList.add("on");
+  clearTimeout(savedTimer);
+  savedTimer = setTimeout(() => box.classList.remove("on"), 1600);
+}
+async function assign(name, value) {
+  S.settings[name] = value;
+  if (await api().assign(name, value)) saved();
+}
+async function device(key, changes) {
+  const entry = { ...(S.settings.devices[key] || {}), ...changes };
+  for (const k of Object.keys(entry)) if (entry[k] === null || entry[k] === "" || entry[k] === false) delete entry[k];
+  if (Object.keys(entry).length) S.settings.devices[key] = entry; else delete S.settings.devices[key];
+  if (await api().device(key, changes)) saved();
+}
+
+/* ── building blocks ──────────────────────────────────────────────── */
+function toggle(checked, onChange, cardNode = null) {
+  const node = el(`<label class="toggle"><input type="checkbox" ${checked ? "checked" : ""}><span class="track"><span class="knob"></span></span>
+    <span class="state">${checked ? "ON" : "OFF"}</span></label>`);
+  const input = node.querySelector("input");
+  const paint = () => {
+    node.querySelector(".state").textContent = input.checked ? "ON" : "OFF";
+    node.querySelector(".state").classList.toggle("on", input.checked);
+    node.closest(".card")?.classList.toggle("on", input.checked);
+  };
+  input.addEventListener("change", () => { paint(); onChange(input.checked); });
+  node.addEventListener("click", (e) => e.stopPropagation());
+  requestAnimationFrame(paint);
+  return node;
+}
+function card(icon, title, sub, control, spark = false) {
+  const node = el(`<div class="card"><div class="row"><div class="glyph"><i class="icon ${spark ? "spark" : ""}">${icon}</i></div>
+    <div class="label"><div class="title">${esc(title)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div><div class="right"></div></div></div>`);
+  if (control) node.querySelector(".right").append(control);
+  return node;
+}
+function expander(icon, title, sub, inner, right = null, spark = false) {
+  const node = el(`<div class="card click"><div class="row"><div class="glyph"><i class="icon ${spark ? "spark" : ""}">${icon}</i></div>
+    <div class="label"><div class="title">${esc(title)}</div>${sub !== null ? `<div class="sub">${esc(sub)}</div>` : ""}</div>
+    <div class="right"></div><i class="icon chev">&#xE70D;</i></div><div class="body"><div><div class="inner"></div></div></div></div>`);
+  if (right) node.querySelector(".right").append(right);
+  node.querySelector(".inner").append(...inner);
+  node.querySelector(".row").addEventListener("click", () => node.classList.toggle("open"));
+  return node;
+}
+function line(label, ...controls) {
+  const node = el(`<div class="line"><span class="data">${esc(label)}</span></div>`);
+  node.append(...controls);
+  return node;
+}
+function numberBox(value, min, max, unit, onChange) {
+  const node = el(`<div style="display:flex;align-items:center;gap:10px"><div class="number"><button aria-label="less">&minus;</button>
+    <input type="number" value="${value}" min="${min}" max="${max}"><button aria-label="more">+</button></div><span class="unit">${esc(unit)}</span></div>`);
+  const input = node.querySelector("input");
+  let timer = 0;
+  const commit = () => {
+    const v = Math.max(min, Math.min(max, parseInt(input.value, 10) || min));
+    input.value = v;
+    clearTimeout(timer);
+    timer = setTimeout(() => onChange(v), 350);
+  };
+  const [less, more] = node.querySelectorAll("button");
+  less.onclick = () => { input.value = (parseInt(input.value, 10) || min) - 1; commit(); };
+  more.onclick = () => { input.value = (parseInt(input.value, 10) || min) + 1; commit(); };
+  input.addEventListener("change", commit);
+  return node;
+}
+function stagger(container) {
+  [...container.children].forEach((child, i) => { child.style.animationDelay = `${i * 40}ms`; });
+}
+
+/* ── General ──────────────────────────────────────────────────────── */
+function renderGeneral() {
+  const s = S.settings;
+  const sources = document.getElementById("sources");
+  sources.replaceChildren(
+    card("&#x2733;", "Claude usage limits", "The 5-hour and weekly limits from your Claude Code login",
+      toggle(s.sources.claude !== false, (on) => assign("sources", { ...S.settings.sources, claude: on })), true),
+    card("&#xE702;", "Bluetooth devices", "Headphones, keyboards, mice, controllers and phones that report their battery",
+      toggle(s.sources.bluetooth !== false, (on) => assign("sources", { ...S.settings.sources, bluetooth: on }))),
+    card("&#xE962;", "HATOR mouse", "Read through its USB dongle",
+      toggle(s.sources.hator !== false, (on) => assign("sources", { ...S.settings.sources, hator: on }))),
+  );
+  stagger(sources);
+
+  document.getElementById("startup").replaceChildren(card("&#xE7E8;", "Start with Windows", "Juice-Mate appears on the taskbar when you sign in",
+    toggle(S.autostart, async (on) => { S.autostart = await api().autostart(on); saved(); })));
+
+  const prompt = el(`<div style="display:grid;gap:10px"><textarea spellcheck="false">${esc(s.claude_prompt)}</textarea>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="primary">Save question</button>
+    <button>Back to tech news</button><span class="hint">{news} stands for the day's headlines · empty renews quietly</span></div></div>`);
+  const area = prompt.querySelector("textarea");
+  const [save, reset] = prompt.querySelectorAll("button");
+  save.onclick = () => assign("claude_prompt", area.value.trim());
+  reset.onclick = () => { area.value = S.default_prompt; assign("claude_prompt", area.value); };
+
+  const claude = document.getElementById("claude");
+  claude.replaceChildren(
+    card("&#xE917;", "Show when each limit resets", "5h 45% →16:00   ·   7d 66% →26.10",
+      toggle(s.claude_reset_time, (on) => assign("claude_reset_time", on))),
+    card("&#xE9D2;", "Show what is left", "70% left instead of 30% used — the colour still follows what is used",
+      toggle(s.claude_left, (on) => assign("claude_left", on))),
+    card("&#xE768;", "Keep the 5-hour window running", "When a window ends, Claude Code runs once to start the next and tell you the day's tech news",
+      toggle(s.keep_claude_window, (on) => assign("keep_claude_window", on))),
+    expander("&#xE8F2;", "Question for Claude", "What the quiet Claude Code run asks; the answer comes as a notification", [prompt]),
+  );
+  stagger(claude);
+}
+
+/* ── Panel items ──────────────────────────────────────────────────── */
+function ordered() {
+  const rank = new Map(S.settings.order.map((k, i) => [k, i]));
+  return S.entries.map((e, i) => [e, i])
+    .sort((a, b) => ((rank.get(a[0].key) ?? 1e6) - (rank.get(b[0].key) ?? 1e6)) || a[1] - b[1]).map((p) => p[0]);
+}
+const shownOf = (e) => e.group === "sensor" ? S.settings.sensors.includes(e.key.replace("system:", "")) : !(S.settings.devices[e.key] || {}).hidden;
+const placeOf = (e) => S.settings.placement[e.key] || e.place;
+const nameOf = (e) => (S.settings.devices[e.key] || {}).name || e.name;
+const glyphOf = (e) => { const k = (S.settings.devices[e.key] || {}).kind; return k && S.kinds[k] ? S.kinds[k] : e.glyph; };
+
+function itemCard(e) {
+  const sub = () => `${PLACE[placeOf(e)]}${shownOf(e) ? "" : "  ·  hidden"}`;
+  const inner = [];
+  if (e.group !== "sensor") {
+    const name = el(`<input type="text" placeholder="${esc(e.name)}" value="${esc((S.settings.devices[e.key] || {}).name || "")}">`);
+    let timer = 0;
+    name.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => { await device(e.key, { name: name.value.trim() || null }); refreshCard(); }, 500);
+    });
+    inner.push(line("Name", name));
+  }
+  if (e.group === "device") {
+    const icons = el(`<div class="icons"></div>`);
+    const paint = () => icons.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.kind === ((S.settings.devices[e.key] || {}).kind || "")));
+    for (const [kind, glyph] of Object.entries(S.kinds)) {
+      const b = el(`<button class="icon" title="${KIND[kind] || kind}" data-kind="${kind}">${glyph}</button>`);
+      b.onclick = async () => { await device(e.key, { kind: kind === e.kind ? null : kind }); paint(); refreshCard(); };
+      icons.append(b);
+    }
+    const auto = el(`<button class="auto" data-kind="">Auto · ${KIND[e.kind] || "as found"}</button>`);
+    auto.onclick = async () => { await device(e.key, { kind: null }); paint(); refreshCard(); };
+    icons.append(auto);
+    paint();
+    inner.push(line("Icon", icons));
+  }
+  const where = el(`<select>${S.places.map((p) => `<option value="${p}">${PLACE[p]}</option>`).join("")}</select>`);
+  where.value = placeOf(e);
+  where.onchange = () => {
+    const rest = Object.fromEntries(Object.entries(S.settings.placement).filter(([k]) => k !== e.key));
+    assign("placement", where.value === e.place ? rest : { ...rest, [e.key]: where.value });
+    refreshCard();
+  };
+  inner.push(line("Where", where));
+  const up = el(`<button><i class="icon" style="font-size:11px">&#xE70E;</i>&nbsp; Up</button>`);
+  const down = el(`<button><i class="icon" style="font-size:11px">&#xE70D;</i>&nbsp; Down</button>`);
+  up.onclick = () => move(e.key, -1);
+  down.onclick = () => move(e.key, 1);
+  inner.push(line("Order", up, down));
+
+  const shown = toggle(shownOf(e), (on) => {
+    if (e.group === "sensor") {
+      const sensor = e.key.replace("system:", "");
+      const rest = S.settings.sensors.filter((x) => x !== sensor);
+      assign("sensors", on ? [...rest, sensor] : rest);
+    } else device(e.key, { hidden: !on });
+    refreshCard();
+  });
+  const node = expander(glyphOf(e), nameOf(e), sub(), inner, shown, e.group === "usage");
+  node.dataset.key = e.key;
+  function refreshCard() {
+    node.querySelector(".glyph .icon").innerHTML = glyphOf(e);
+    node.querySelector(".title").textContent = nameOf(e);
+    node.querySelector(".sub").textContent = sub();
+  }
+  return node;
+}
+
+function renderItems(animate = true) {
+  const box = document.getElementById("itemgroups");
+  const open = new Set([...box.querySelectorAll(".card.open")].map((c) => c.dataset.key));
+  const all = ordered();
+  box.replaceChildren();
+  for (const [group, title] of GROUPS) {
+    const members = all.filter((e) => e.group === group);
+    if (!members.length) continue;
+    box.append(el(`<h2 class="data">${title}</h2>`));
+    const stack = el(`<div class="group ${animate ? "stack" : ""}"></div>`);
+    for (const e of members) {
+      const node = itemCard(e);
+      if (open.has(e.key)) node.classList.add("open");
+      stack.append(node);
+    }
+    if (animate) stagger(stack);
+    box.append(stack);
+  }
+  if (!S.entries.length) box.append(el(`<p class="hint">Nothing yet — Juice-Mate lists what it finds a few seconds after it starts.</p>`));
+}
+
+function move(key, step) {
+  const keys = ordered().map((e) => e.key);
+  const group = S.entries.find((e) => e.key === key).group;
+  const same = keys.filter((k) => S.entries.find((e) => e.key === k).group === group);
+  const to = same.indexOf(key) + step;
+  if (to < 0 || to >= same.length) return;
+  const ai = keys.indexOf(key), bi = keys.indexOf(same[to]);
+  [keys[ai], keys[bi]] = [keys[bi], keys[ai]];
+  // FLIP: note where the cards were, re-render, then let them slide from there to their new place.
+  const before = new Map([...document.querySelectorAll("#itemgroups .card")].map((c) => [c.dataset.key, c.getBoundingClientRect().top]));
+  assign("order", keys);
+  renderItems(false);
+  for (const c of document.querySelectorAll("#itemgroups .card")) {
+    const dy = (before.get(c.dataset.key) ?? 0) - c.getBoundingClientRect().top;
+    if (!dy) continue;
+    c.style.transform = `translateY(${dy}px)`;
+    requestAnimationFrame(() => { c.classList.add("moving"); c.style.transform = ""; });
+    c.addEventListener("transitionend", () => c.classList.remove("moving"), { once: true });
+  }
+}
+
+/* ── Alerts ───────────────────────────────────────────────────────── */
+function renderAlerts() {
+  const s = S.settings;
+  const t = document.getElementById("thresholds");
+  t.replaceChildren(
+    card("&#xE83F;", "A battery below", "Its number turns red", numberBox(s.battery_low, 1, 99, "%", (v) => assign("battery_low", v))),
+    card("&#x2733;", "A Claude limit from", "Also red whenever the pace runs it out before it resets",
+      numberBox(s.usage_high, 1, 100, "% used", (v) => assign("usage_high", v)), true),
+    card("&#xE950;", "Load from", "CPU, GPU, memory or disk", numberBox(s.busy_percent, 1, 100, "%", (v) => assign("busy_percent", v))),
+    card("&#xE9CA;", "GPU temperature from", null, numberBox(s.hot_celsius, 40, 110, "°C", (v) => assign("hot_celsius", v))),
+  );
+  stagger(t);
+  const kinds = [
+    ["battery", "&#xE83F;", "A battery runs low", null, false],
+    ["usage_pace", "&#x2733;", "A Claude limit will run out before it resets", "At the pace of the last hour", true],
+    ["usage_back", "&#xE895;", "A spent Claude limit is back", "The moment for the heavy task you held back", false],
+    ["news", "&#xE8F2;", "Tech news", "The answer of the quiet Claude Code run", false],
+  ];
+  const n = document.getElementById("notify");
+  n.replaceChildren(...kinds.map(([kind, icon, title, sub, spark]) =>
+    card(icon, title, sub, toggle(s.alerts[kind] !== false, (on) => assign("alerts", { ...S.settings.alerts, [kind]: on })), spark)));
+  n.append(card("&#xE7E7;", "Battery notification below", "Once per discharge — not again until it is charged",
+    numberBox(s.battery_alert, 1, 99, "%", (v) => assign("battery_alert", v))));
+  stagger(n);
+}
+
+/* ── navigation ───────────────────────────────────────────────────── */
+function glide(item) { document.getElementById("glider").style.transform = `translateY(${item.offsetTop}px)`; }
+for (const item of document.querySelectorAll(".navitem")) {
+  item.addEventListener("click", () => {
+    document.querySelectorAll(".navitem").forEach((n) => n.classList.toggle("active", n === item));
+    glide(item);
+    document.querySelectorAll(".page").forEach((p) => p.classList.toggle("shown", p.id === item.dataset.page));
+    document.getElementById("main").scrollTop = 0;
+    ({ general: renderGeneral, items: renderItems, alerts: renderAlerts })[item.dataset.page]?.();
+  });
+}
+document.getElementById("minimize").onclick = () => api().minimize();
+document.getElementById("close").onclick = () => api().close();
+// Quitting everything takes two clicks: the first one asks, in place, for three seconds.
+let armedTimer = 0;
+document.getElementById("power").onclick = (event) => {
+  const power = event.currentTarget;
+  if (power.classList.contains("armed")) { api().quit_all(); return; }
+  power.classList.add("armed");
+  clearTimeout(armedTimer);
+  armedTimer = setTimeout(() => power.classList.remove("armed"), 3000);
+};
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") api().close(); });
+document.getElementById("project").addEventListener("click", () => api().open_url("https://github.com/Zebaro24/Juice-Mate"));
+
+async function boot() {
+  S = await api().state();
+  document.getElementById("version").textContent = `v ${S.version}`;
+  document.getElementById("version2").textContent = `Version ${S.version}`;
+  glide(document.querySelector(".navitem.active"));
+  renderGeneral();
+}
+window.addEventListener("pywebviewready", boot);
+</script>
+</body>
+</html>

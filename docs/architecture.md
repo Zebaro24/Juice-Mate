@@ -249,6 +249,22 @@ Wi-Fi glyph (16 px), at 96 DPI, scaled with the taskbar's DPI (re-measured 2026-
 All in `settings.json` (`settings.py`), read by the poll loop every tick, so a change shows within
 two seconds; the menu and the settings window (step 13) only change fields and save.
 
+**The settings window** (owner, 2026-10-22) — menu → **Settings…**. A process of its own,
+`JuiceMate.exe --settings` (`ui/settings_app.py`), so a window waiting on the user never touches the
+taskbar's thread and a crash there never takes the panel along. Drawn by WebView2 (Edge, built into
+Windows 11; `pywebview`) from `ui/settings.html`: chosen over real WinUI 3, which worked in a spike
+but leaves no room for the charts and motion the owner wants. Its look is Juice-Mate's own — dark,
+quiet, a distant cousin of zebaro.dev: night navy, one cyan signal for what is on, magenta only for
+what is red, mono labels, the site's calm easing. No Windows frame: the page draws a title bar with
+minimize, close (this window only) and quit (Juice-Mate entirely, two clicks), with Windows 11's
+rounded corners and the logo as the icon (`logo.py` → `%APPDATA%\JuiceMate\icon.ico`).
+
+- The page changes one field at a time through `Api` (reload the file, `Settings.assign`, save);
+  the panel process picks the file up with `Settings.reload_if_changed()` on its next tick.
+- What can be listed comes from `items.json`, which the panel writes when a new device reports.
+- Quit everything: a named event `Local\JuiceMateQuit` the panel waits on (`quit.py`).
+- One window at a time (mutex `Local\JuiceMateSettings`); a second **Settings…** brings it forward.
+
 - **Sources** on/off (`sources`): Claude usage, Bluetooth devices, HATOR mouse. Off = not polled at
   all; the Claude menu items go too. Menu → **Sources**.
 - **Devices** (`devices`, by item key `source:device_id`): a name, an icon (a `Kind` — for a device

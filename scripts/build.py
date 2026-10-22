@@ -13,7 +13,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from logo import icon  # scripts/logo.py: this script's own folder is on sys.path
+from juice_mate.logo import icon
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "build"
@@ -42,6 +42,9 @@ def main() -> int:
         "winrt",
         "--collect-binaries",
         "winrt",
+        # The settings page (ui/settings.html) is read as package data at run time.
+        "--collect-data",
+        "juice_mate",
         "--workpath",
         str(BUILD / "pyinstaller"),
         "--specpath",
