@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.0 — 2026-10-22
+
+Two strips, text that matches the clock, and Claude limits that no longer wait for Claude Code.
+
+- **Sensors at the left end** — network, CPU and GPU now sit at the left of the taskbar, right after
+  the weather widget; batteries and Claude stay by the clock. On Windows 10 or a left-aligned
+  taskbar everything stays by the clock.
+- **Text like the clock's** — numbers at the clock's size and density, crisp instead of blurry; the
+  two rows sit a little further apart so the icons no longer touch. The Claude ✳ is bolder.
+- **Claude without opening Claude Code** — when the login's token has expired, Juice-Mate runs Claude
+  Code once, invisibly, and the numbers come back on their own; the login is never touched.
+- **Keep the 5-hour window running** (menu checkbox, off by default) — starts a new window whenever
+  the last one has ended, and tells you the day's two biggest tech stories as a notification.
+  **Ask Claude now** in the menu does it on demand. Each run costs a fraction of a percent.
+- **Claude % matches `/usage`** — rounded down like Claude Code (it said 2 % where the panel said 3 %).
+- **Red when the pace runs out** — a Claude window turns red when it will run out before it resets.
+- **A logo** — the app, its installer and its shortcut get their own icon.
+
 ## v0.2.0 — 2026-10-21
 
 TrafficMonitor's job, without its flagged driver, plus a forecast for the Claude limits.
