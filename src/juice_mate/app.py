@@ -22,7 +22,7 @@ from juice_mate.core.reading import Reading, level
 from juice_mate.sources import Sensor, Source, poll_all
 from juice_mate.sources.bluetooth import Bluetooth
 from juice_mate.sources.claude import Claude
-from juice_mate.sources.claude_run import ClaudeRun
+from juice_mate.sources.claude_run import ClaudeRun, find_claude
 from juice_mate.sources.hator import Hator
 from juice_mate.sources.system import (
     CpuLoad,
@@ -159,6 +159,9 @@ def run() -> None:
         settings.keep_claude_window = not settings.keep_claude_window
         settings.save()
 
+    def ask_now() -> None:
+        claude_run.request("asked from the menu", now_please=True)  # a thread of its own: returns at once
+
     def menu() -> list[MenuEntry | None]:
         ready = updater.ready
         update = [MenuEntry(f"Restart to update to {ready}", updater.restart_now), None] if ready else []
@@ -170,6 +173,7 @@ def run() -> None:
             *update,
             MenuEntry("Show", children=shown),
             MenuEntry("Refresh now", refresh_now),
+            *([MenuEntry("Ask Claude now", ask_now)] if find_claude() else []),
             MenuEntry("Keep Claude's 5-hour window running", toggle_keep_window, checked=settings.keep_claude_window),
             MenuEntry("Start with Windows", toggle_autostart, checked=autostart.is_enabled()),
             None,

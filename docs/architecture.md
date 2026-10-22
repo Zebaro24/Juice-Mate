@@ -65,7 +65,8 @@ A failing source returns an error reading, never raises into the poll loop.
   no session file, no user settings. Claude Code renews its own token as it always does; the file is
   re-read every poll (no request), so the renewed token shows at once.
 - **Keeping the 5-hour window running** (owner, 2026-10-22; a menu checkbox, off by default — it spends the account's quota): when the
-  answer shows no running 5-hour window, the same run opens one. At most one run per 30 min. The
+  answer shows no running 5-hour window, the same run opens one. At most one run per 30 min; "Ask
+  Claude now" in the menu (shown when Claude Code is installed) runs it at once. The
   prompt is `claude_prompt` in `settings.json` and its answer comes as a toast; an empty prompt
   renews silently. `{news}` in the prompt becomes the last day's headlines from The Verge, TechCrunch
   and Engadget RSS (`sources/news.py`, fetched by Juice-Mate: ~1k tokens, where a web search by

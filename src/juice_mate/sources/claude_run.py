@@ -82,9 +82,10 @@ class ClaudeRun:
         self._reply: str | None = None
         self.finished = 0  # counts finished runs: a new value means "ask for the usage again now"
 
-    def request(self, reason: str) -> None:
+    def request(self, reason: str, now_please: bool = False) -> None:
+        """`now_please` (the owner's menu item) skips the wait between runs, not a run in progress."""
         now = self._clock()
-        if self._busy or now < self._next:
+        if self._busy or (now < self._next and not now_please):
             return
         exe = self._exe()
         if exe is None:

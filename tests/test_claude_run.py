@@ -78,3 +78,11 @@ def test_no_headlines_renews_silently() -> None:
     run.request("idle window")
     assert runner.calls[0][2] == QUIET_PROMPT
     assert run.take_reply() is None
+
+
+def test_asking_from_the_menu_skips_the_wait() -> None:
+    runner = Runner()
+    run = make(runner)
+    run.request("idle window")
+    run.request("asked from the menu", now_please=True)
+    assert len(runner.calls) == 2
