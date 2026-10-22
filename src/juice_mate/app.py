@@ -1,7 +1,7 @@
 """Entry point: `python -m juice_mate` puts the panel on the taskbar; `--dump` prints every reading once.
 
 Runs windowed (pythonw / PyInstaller --windowed): there is no console, so everything worth knowing
-goes to %LOCALAPPDATA%\\JuiceMate\\juice-mate.log.
+goes to %APPDATA%\\JuiceMate\\juice-mate.log (folders.py).
 """
 
 import argparse
@@ -13,8 +13,8 @@ import threading
 import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
+from juice_mate import folders
 from juice_mate.core.alerts import Alert, Alerts
 from juice_mate.core.display import items, metric_item
 from juice_mate.core.metric import Unit, short
@@ -101,7 +101,7 @@ def dump() -> None:
 
 
 def _log_to_file() -> None:
-    folder = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "JuiceMate"
+    folder = folders.data()
     folder.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(folder / "juice-mate.log", maxBytes=512_000, backupCount=1, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
@@ -229,6 +229,7 @@ def main() -> None:
         dump()
         return
     _log_to_file()
+    folders.migrate()
     if not _first_instance():
         log.info("already running")
         return

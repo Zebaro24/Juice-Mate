@@ -1,4 +1,4 @@
-"""The owner's choices that outlive a restart — %LOCALAPPDATA%\\JuiceMate\\settings.json.
+"""The owner's choices that outlive a restart — %APPDATA%\\JuiceMate\\settings.json (folders.py).
 
 Only what the menu can change lives here, plus `claude_prompt`, edited in the file by hand. A missing or
 broken file, or a broken field, means the defaults: the app must start on a clean PC (the second one)
@@ -7,9 +7,10 @@ without anyone writing a config.
 
 import json
 import logging
-import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+from juice_mate import folders
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ DEFAULT_PROMPT = NEWS_PROMPT
 
 
 def _path() -> Path:
-    return Path(os.environ.get("LOCALAPPDATA", Path.home())) / "JuiceMate" / "settings.json"
+    return folders.data() / "settings.json"
 
 
 @dataclass

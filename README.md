@@ -41,7 +41,7 @@ headlines from The Verge, TechCrunch and Engadget and tells you the two tech sto
 most, as a notification. **Ask Claude now** does it on demand. Each run costs a fraction of a
 percent of the window.
 
-The question is yours to change: `claude_prompt` in `%LOCALAPPDATA%\JuiceMate\settings.json`, where
+The question is yours to change: `claude_prompt` in `%APPDATA%\JuiceMate\settings.json`, where
 `{news}` stands for the headlines and an empty string means "just keep the window, quietly".
 
 ## Install

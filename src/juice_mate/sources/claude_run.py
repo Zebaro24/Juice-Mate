@@ -10,7 +10,6 @@ fails only means the item keeps its "expired" note until Claude Code is opened.
 """
 
 import logging
-import os
 import shutil
 import subprocess
 import threading
@@ -18,6 +17,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
+from juice_mate import folders
 from juice_mate.sources.news import headlines
 
 log = logging.getLogger(__name__)
@@ -105,7 +105,7 @@ class ClaudeRun:
         return reply
 
     def _go(self, exe: str) -> None:
-        folder = Path(os.environ.get("LOCALAPPDATA", Path.home())) / "JuiceMate"
+        folder = folders.data()
         try:
             prompt = self._prompt().strip()
             if NEWS in prompt:

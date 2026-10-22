@@ -12,6 +12,7 @@ A dev checkout is not installed: everything here quietly does nothing.
 import logging
 import sys
 import threading
+from collections.abc import Callable
 
 import velopack
 
@@ -30,13 +31,26 @@ def startup() -> None:
         return
     from juice_mate.update import autostart
 
-    def first_run() -> None:
-        try:
-            autostart.set_enabled(True)
-        except OSError:
-            log.exception("could not enable autostart on first run")
+    # Velopack passes the version to every hook: a hook without a parameter failed silently, and
+    # v0.3.0 installed without autostart (2026-10-22).
+    def switch(enabled: bool) -> Callable[..., None]:
+        def hook(*_version: object) -> None:
+            try:
+                autostart.set_enabled(enabled)
+            except OSError:
+                log.exception("could not switch autostart %s", "on" if enabled else "off")
 
-    velopack.App().on_first_run(first_run).run()
+        return hook
+
+    # On at install (a fast hook, inside Setup), again at the first run in case that failed, and off
+    # at uninstall — a Run entry must not outlive the app.
+    (
+        velopack.App()
+        .on_after_install_fast_callback(switch(True))
+        .on_first_run(switch(True))
+        .on_before_uninstall_fast_callback(switch(False))
+        .run()
+    )
 
 
 class Updater:

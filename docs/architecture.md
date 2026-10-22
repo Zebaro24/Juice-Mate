@@ -97,7 +97,9 @@ A failing source returns an error reading, never raises into the poll loop.
 - **No console window, ever**: PyInstaller builds with `--windowed`; in development the app runs
   under `pythonw.exe`. Then `sys.stdout` / `sys.stderr` are `None` — code must not assume them.
 - The app calls `velopack.App().run()` first thing in `main`, before argparse (Velopack runs the exe
-  with its own hook arguments); the first run after install switches autostart on.
+  with its own hook arguments). Autostart: on in the after-install hook and again at the first run,
+  off in the before-uninstall hook. Every hook gets the version as an argument — 0.3.0's hook took
+  none, failed silently and installed without autostart.
 - Build: `poetry run python scripts/build.py` → `dist/JuiceMate/` (~42 MB, ~62 MB RAM running).
   CI: `.github/workflows/ci.yml` runs the strict gate on every push to main;
   `.github/workflows/release.yml` on a `vX.Y.Z` tag checks the tag against `VERSION`, builds,
@@ -136,7 +138,9 @@ decides later — the classes exist so that choice is configuration, not code.
 On the panel (2026-10-21): each sensor is an item in the `system` group — ↑/↓ arrows (70 % size, they
 fill the em box), a chip for CPU, a card for GPU, a thermometer, a memory chip, a drive — refreshed
 every 2 s while batteries refresh every 30 s. Right-click → **Show** → a checkmark per sensor; the
-choice lives in `%LOCALAPPDATA%\JuiceMate\settings.json` (`settings.py`, written atomically).
+choice lives in `%APPDATA%\JuiceMate\settings.json` (`settings.py`, written atomically), next to the
+log — never in `%LOCALAPPDATA%\JuiceMate`, Velopack's install folder: a file there made Setup think
+the app was installed, and uninstall wipes it (`folders.py`; 0.3.0's settings are carried over once).
 Default: up, down, CPU, GPU — what TrafficMonitor showed on the owner's taskbar. Red: ≥ 85 °C, ≥ 95 %.
 
 Not read: **CPU temperature** — it needs ring 0, which is exactly what got TrafficMonitor flagged.

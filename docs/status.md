@@ -123,3 +123,11 @@ Anthropic model and Sony's Pulse headset, one Russian line each.
 A news answer no longer repeats: the last three answers go back into the prompt as "already told".
 The logo (an upright battery full of juice, a mate leaf on the cap) is drawn by `scripts/logo.py` —
 `docs/logo.png` for the README, the exe's and Setup's `.ico` at build time; the local build passed.
+
+## v0.3.0 installed on the owner's PC (2026-10-22)
+
+Setup refused at first ("already installed"): the app's settings and log lived in
+`%LOCALAPPDATA%\JuiceMate`, Velopack's own install folder. Moved by hand, then installed: the panel
+attached from `current\JuiceMate.exe`, the update check ran and found nothing newer. Autostart did
+not switch on — the first-run hook took no argument and failed silently; set by hand. Fixed in code:
+data in `%APPDATA%\JuiceMate` (carried over once), autostart through the install / uninstall hooks.
