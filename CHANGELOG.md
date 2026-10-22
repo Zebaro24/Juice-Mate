@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.4.0 — 2026-10-22
+
+Settings for everything, a card with a chart on hover, a menu of its own, news you can open.
+
+- **Settings window** — right-click → **Settings…**. Turn whole sources off (no Claude on this PC?
+  switch it off), rename any device, give it another icon, hide it, change the order, move items to
+  either end of the taskbar or to a second monitor, set when numbers turn red and which
+  notifications you get. Changes show on the panel within two seconds. Its own dark look, with
+  minimize, close, and a button that quits Juice-Mate entirely.
+- **Hover card instead of the tooltip** — rest the mouse on an item: a card with a chart and a few
+  words. For a battery: how fast it drains, how long it lasts, when it was last charged, with the
+  charging stretches shaded. For a Claude limit: when it resets and where the pace leads. For a
+  sensor: the last hour's low, average and high. It no longer blinks when the panel updates.
+- **A right-click menu of its own** — the panel's look, switches that flip in place without closing
+  the menu, submenus that slide out.
+- **Claude limits with their reset time** — `5h 45% →16:00`, `7d 66% →26.10`; or show what is left.
+- **Tech news you can open** — each story's notification has a button to its article; recent news
+  in the menu; pick the topics you care about. Only links to The Verge, TechCrunch and Engadget open.
+- **New sensors** — ping (with "off" in red when the internet is gone), RAM and VRAM in gigabytes.
+- **Second monitor** — items can sit on its taskbar too.
+- A device you hid no longer sends low-battery notifications.
+
 ## v0.3.1 — 2026-10-22
 
 Installing on a clean PC, fixed.
