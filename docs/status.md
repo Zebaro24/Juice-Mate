@@ -110,7 +110,7 @@ owner's PC: `✳ 5h 29% / 7d 60% · 🖱 86% / 🎧 80% · ↑ 16K / ↓ 2K · C
 
 The panel is two strips: sensors at the taskbar's left end after the weather widget (UI Automation
 found its edge at x 158 on the owner's PC), batteries and usage by the notification area. Numbers are
-14 px at weight 450, whole-pixel positions and a contrast curve — 10 px digits (13 px matched the clock by measure but still read smaller) — and the rows sit 2 px further apart. Usage %
+14 px at weight 600 (450 still read thinner than the clock), whole-pixel positions and a contrast curve — 10 px digits (13 px matched the clock by measure but still read smaller) — and the rows sit 2 px further apart. Usage %
 rounds down like Claude Code's `/usage` (it showed 2 % where the panel said 3 %). An expired token or
 an idle 5-hour window makes Juice-Mate run `claude -p` on Haiku once (tried by hand: 3 s, answer in
 Russian); its answer comes as a toast. ⚠️ Not yet seen in the app itself: a run on a real expiry or

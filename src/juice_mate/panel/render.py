@@ -24,7 +24,7 @@ _PRIVATE_USE = range(0xE000, 0xF900)  # where the icon fonts keep their glyphs
 # apart than the clock's (owner).
 GLYPH_PX = 16
 TEXT_PX = 14
-TEXT_WEIGHT = 450  # a half step above the clock's Regular: with the curve below, the clock's own ink
+TEXT_WEIGHT = 600  # Semibold: at 450 the strokes still read thinner than the clock's (owner, 2026-10-22)
 BOLT_PX = 10
 ROWS = (14 / 48, 32 / 48)  # row centres as a share of the taskbar height
 GAP_INNER = 5  # glyph to number
