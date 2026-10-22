@@ -338,16 +338,18 @@ class Panel:
         if taskbar and self._anchor != self._geometry(taskbar):
             self._paint()
 
-    def _menu(self) -> None:
-        """Juice-Mate's own menu (menu.py), above the cursor, kept between the taskbar's ends."""
+    def _menu(self, strip: _Strip) -> None:
+        """Juice-Mate's own menu (menu.py), above the cursor, kept between the ends of the taskbar
+        that was clicked — the second monitor's too — and drawn at that monitor's scale."""
         for menu in list(self._menus.values()):
             if menu.parent is None:
                 menu.close()
         point = w.POINT()
         api.user32.GetCursorPos(ctypes.byref(point))
-        taskbar = self._anchor.taskbar if self._anchor else (0, point.y, point.x + 1, point.y)
-        scale = self._anchor.scale if self._anchor else 1.0
-        bounds = (taskbar[0], 0, taskbar[2], taskbar[1])  # the screen above the taskbar
+        taskbar, scale = strip.taskbar, strip.scale
+        if taskbar[2] <= taskbar[0]:  # not placed yet: around the cursor
+            taskbar = (point.x - 1, point.y, point.x + 1, point.y)
+        bounds = (taskbar[0], taskbar[1] - 32_000, taskbar[2], taskbar[1])  # anywhere above that taskbar
         if self._hover is not None:
             self._hover.leave()
         PopupMenu(_CLASS, self._menu_entries(), (point.x, point.y), scale, bounds, self._menus)
@@ -411,7 +413,7 @@ class Panel:
                     return 0
             elif hwnd and (strip := self._strip_of(hwnd)) is not None:
                 if msg == api.WM_RBUTTONUP:
-                    self._menu()
+                    self._menu(strip)
                     return 0
                 if msg == api.WM_LBUTTONUP:
                     self._click(strip, lparam)

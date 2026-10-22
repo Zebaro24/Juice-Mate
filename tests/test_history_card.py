@@ -78,3 +78,19 @@ def test_cards_read_like_a_story() -> None:
     sensor = sensor_card(metric_item(m, datetime(2026, 10, 22)), m, samples, now)
     assert sensor.lines == ["Last hour  low 10% · avg 30% · high 50%"]
     assert sensor.y_max == 100.0
+
+
+def test_charging_time_counts_only_this_charge() -> None:
+    yesterday = [Sample(T0 + 600 * i, 20 + 5 * i, True) for i in range(7)]  # 20 → 50 %, a day ago
+    gap = drain(T0 + 2 * HOUR, 1.0, 20, 50)  # a long day off the charger
+    now_start = gap[-1].t + 600
+    today = [Sample(now_start + 600 * i, 40 + 10 * i, True) for i in range(5)]  # 40 → 80 %, +60 %/h
+    story = insight.battery(yesterday + gap + today)
+    assert story.charging
+    assert story.rate is not None and abs(story.rate - 60) < 0.5
+    assert story.hours_left is not None and abs(story.hours_left - 20 / 60) < 0.02
+
+
+def test_a_charge_at_the_very_first_sample_still_counts() -> None:
+    samples = [Sample(T0, 90.0, True), *drain(T0 + 600, 4.0, 2, 89)]
+    assert insight.battery(samples).charged_at == T0 + 600

@@ -19,11 +19,19 @@ class BatteryStory:
 def _since_last_charge(samples: list[Sample]) -> list[Sample]:
     """The samples after the last charge ended: only they show how fast it drains now."""
     start = 0
-    for i in range(1, len(samples)):
-        if samples[i].charging:
+    for i, sample in enumerate(samples):
+        if sample.charging:
             start = i + 1  # still on the charger: drain starts after it
-        elif samples[i].value - samples[i - 1].value >= RISE:
+        elif i and sample.value - samples[i - 1].value >= RISE:
             start = i  # a jump seen between two reads: the top is the first drained point
+    return samples[start:]
+
+
+def _this_charge(samples: list[Sample]) -> list[Sample]:
+    """The unbroken run of charging samples at the end: the current charge, not yesterday's too."""
+    start = len(samples)
+    while start > 0 and samples[start - 1].charging:
+        start -= 1
     return samples[start:]
 
 
@@ -48,8 +56,7 @@ def battery(samples: list[Sample]) -> BatteryStory:
     drained = _since_last_charge(samples)
     charged_at = drained[0].t if drained and len(drained) < len(samples) else None
     if charging:
-        recent = [s for s in samples if s.charging][-30:]
-        rate = _rate(recent)
+        rate = _rate(_this_charge(samples)[-30:])
         left = (100 - samples[-1].value) / rate if rate and rate > 0 else None
         return BatteryStory(rate, left, None, True)
     rate = _rate(drained)

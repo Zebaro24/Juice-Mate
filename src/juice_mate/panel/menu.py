@@ -15,6 +15,7 @@ import ctypes
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from functools import lru_cache
 
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -53,6 +54,7 @@ WM_ACTIVATE, WA_INACTIVE = 0x0006, 0
 WM_KEYDOWN = 0x0100
 VK_RETURN, VK_ESCAPE, VK_LEFT, VK_UP, VK_RIGHT, VK_DOWN = 0x0D, 0x1B, 0x25, 0x26, 0x27, 0x28
 CHEVRON = chr(0xE76C)
+Frame = tuple[int | None, tuple[tuple[int, float], ...], tuple[bool | None, ...]]  # highlight, knobs, switches
 
 
 def _layout(entries: list[MenuEntry | None], header: bool) -> tuple[list[tuple[int, int]], int]:
@@ -66,18 +68,16 @@ def _layout(entries: list[MenuEntry | None], header: bool) -> tuple[list[tuple[i
     return rows, y + PAD
 
 
-def draw(
-    entries: list[MenuEntry | None], highlight: int | None, scale: float, header: bool, knobs: dict[int, float]
-) -> Image.Image:
-    """The menu's image, its shadow included. `knobs`: a switch's knob position 0..1 while it slides."""
+@lru_cache(maxsize=8)
+def _base(w: int, h: int, scale: float, header: bool) -> Image.Image:
+    """The shadow, the card and its header — the costly part (a Gaussian blur), drawn once per menu
+    size and copied for every frame. Never drawn on directly."""
     k = scale * SS
-    rows, height = _layout(entries, header)
-    w, h = round((WIDTH + 2 * SHADOW) * scale), round((height + 2 * SHADOW) * scale)
-    big = Image.new("RGBA", (w * SS, h * SS), (0, 0, 0, 0))
 
     def px(v: float) -> int:
         return round(v * k)
 
+    big = Image.new("RGBA", (w * SS, h * SS), (0, 0, 0, 0))
     left, top = px(SHADOW), px(SHADOW)
     right, bottom = w * SS - px(SHADOW), h * SS - px(SHADOW)
     shadow = Image.new("L", big.size, 0)
@@ -89,7 +89,24 @@ def draw(
     if header:
         canvas.text((left + px(16), top + px(PAD + HEAD / 2)), "JUICE-MATE", font=_font("mono", px(10), 500),
                     fill=(*DIM, 255), anchor="lm")  # fmt: skip
+    return big
 
+
+def draw(
+    entries: list[MenuEntry | None], highlight: int | None, scale: float, header: bool, knobs: dict[int, float]
+) -> Image.Image:
+    """The menu's image, its shadow included. `knobs`: a switch's knob position 0..1 while it slides."""
+    k = scale * SS
+    rows, height = _layout(entries, header)
+    w, h = round((WIDTH + 2 * SHADOW) * scale), round((height + 2 * SHADOW) * scale)
+    big = _base(w, h, scale, header).copy()
+    canvas = ImageDraw.Draw(big)
+
+    def px(v: float) -> int:
+        return round(v * k)
+
+    left, top = px(SHADOW), px(SHADOW)
+    right = w * SS - px(SHADOW)
     label_font = _font("text", px(13))
     for index, (entry, (y0, y1)) in enumerate(zip(entries, rows, strict=True)):
         if entry is None:
@@ -124,7 +141,7 @@ def draw(
                 knobs.get(index, float(entry.checked)),
                 k,
             )
-    return big.resize((w, h), Image.Resampling.LANCZOS)
+    return big.reduce(SS)  # a box filter: as smooth here as LANCZOS, a fraction of the time
 
 
 def _switch(canvas: ImageDraw.ImageDraw, box: tuple[float, float, float, float], t: float, k: float) -> None:
@@ -170,6 +187,8 @@ class PopupMenu:
         self._class = window_class
         self._bounds = bounds
         self._tracking = False
+        # Finished frames by state: hovering back to a line, or the fade, costs a blit, not a drawing.
+        self._frames: dict[Frame, tuple[int, int, bytes]] = {}
         rows, height = _layout(entries, self.header)
         self.rows = rows
         w, h = round((WIDTH + 2 * SHADOW) * scale), round((height + 2 * SHADOW) * scale)
@@ -198,12 +217,24 @@ class PopupMenu:
 
     # ── drawing ────────────────────────────────────────────────────────────
 
+    def _frame_pixels(self) -> tuple[int, int, bytes]:
+        knobs = tuple(sorted((i, round(v, 3)) for i, v in self.knobs.items()))
+        key = (self.highlight, knobs, tuple(e.checked if e else None for e in self.entries))
+        cached = self._frames.get(key)
+        if cached is None:
+            image = draw(self.entries, self.highlight, self.scale, self.header, self.knobs)
+            cached = (image.width, image.height, premultiplied_bgra(image))
+            if len(self._frames) > 48:  # a long session of hovering: start over rather than grow
+                self._frames.clear()
+            self._frames[key] = cached
+        return cached
+
     def _paint(self, alpha: int = 255, rise: float = 0.0) -> None:
-        image = draw(self.entries, self.highlight, self.scale, self.header, self.knobs)
+        width, height, pixels = self._frame_pixels()
         dx = round(-6 * self.scale * rise) if self.parent else 0
         dy = 0 if self.parent else round(8 * self.scale * rise)
         at = (self.origin[0] + dx, self.origin[1] + dy)
-        blit(self.hwnd, image.width, image.height, premultiplied_bgra(image), at=at, alpha=alpha)
+        blit(self.hwnd, width, height, pixels, at=at, alpha=alpha)
 
     def _tick(self) -> None:
         self._frame += 1
