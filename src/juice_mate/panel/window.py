@@ -38,6 +38,7 @@ _WM_UPDATE = api.WM_APP + 1
 _WATCHDOG_TIMER = 1
 _WATCHDOG_MS = 2000
 _MARGIN = 8  # gap between a strip and its neighbour (notification area, Widgets button), at 96 DPI
+_SECOND_CLOCK = 110  # room for the clock on a second monitor's taskbar, at 96 DPI — an estimate
 
 
 @dataclass
@@ -47,6 +48,8 @@ class _Strip:
     hwnd: int | None = None
     spans: list[Span] = field(default_factory=list)
     tracking: bool = False  # asked Windows for WM_MOUSELEAVE
+    taskbar: tuple[int, int, int, int] = (0, 0, 0, 0)  # the taskbar it sits in, screen pixels: the card's anchor
+    scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,7 @@ class _Geometry:
     widgets_right: int | None  # screen x where the Widgets button ends
     scale: float
     light: bool
+    second: tuple[int, int, int, int] | None = None  # the second monitor's taskbar, when there is one
 
 
 def _light_theme() -> bool:
@@ -91,11 +95,16 @@ class Panel:
         self._lock = threading.Lock()
         self._right_items: list[Item] = []
         self._left_items: list[Item] = []
+        self._second_right_items: list[Item] = []
+        self._second_left_items: list[Item] = []
         self._attached = threading.Event()
         self._started = threading.Event()
         self._control: int | None = None  # hidden top-level window: messages, menu owner
         self._right = _Strip()  # batteries and usage, by the notification area
         self._left = _Strip()  # system sensors, at the taskbar's left end
+        self._second_right = _Strip()  # the second monitor's taskbar, by its clock
+        self._second_left = _Strip()  # … and at its left end
+        self._second_parent: int | None = None
         self._widgets = LeftEdge(self._taskbar)
         self._anchor: _Geometry | None = None
         self._light = _light_theme()
@@ -110,11 +119,20 @@ class Panel:
         self._thread.start()
         return self._attached.wait(timeout)
 
-    def show(self, right: list[Item], left: list[Item] | None = None) -> None:
+    def show(
+        self,
+        right: list[Item],
+        left: list[Item] | None = None,
+        second_right: list[Item] | None = None,
+        second_left: list[Item] | None = None,
+    ) -> None:
         """`right` goes by the notification area, `left` to the taskbar's left end — or in front of
-        `right` when the left end is taken."""
+        `right` when the left end is taken. `second_*` go to the second monitor's taskbar, or join the
+        main ones when there is none."""
         with self._lock:
             self._right_items, self._left_items = list(right), list(left or [])
+            self._second_right_items = list(second_right or [])
+            self._second_left_items = list(second_left or [])
         if self._started.is_set() and self._control:
             api.user32.PostMessageW(self._control, _WM_UPDATE, 0, 0)
 
@@ -154,6 +172,34 @@ class Panel:
         found: int | None = api.user32.FindWindowW("Shell_TrayWnd", None)
         return found
 
+    @staticmethod
+    def _secondary() -> int | None:
+        """The second monitor's taskbar — the first one Windows lists, when there are several."""
+        found: int | None = api.user32.FindWindowW("Shell_SecondaryTrayWnd", None)
+        return found
+
+    def _attach_second(self) -> None:
+        """Strips on the second monitor's taskbar, when it has one and they are not there yet."""
+        second = self._secondary()
+        if second == self._second_parent and self._second_right.hwnd and self._second_left.hwnd:
+            return
+        self._detach_second()
+        if not second:
+            return
+        for strip in (self._second_right, self._second_left):
+            strip.hwnd = self._child(second)
+            if not strip.hwnd:
+                self._detach_second()
+                return
+        self._second_parent = second
+
+    def _detach_second(self) -> None:
+        for strip in (self._second_right, self._second_left):
+            if strip.hwnd and api.user32.IsWindow(strip.hwnd):
+                api.user32.DestroyWindow(strip.hwnd)
+            strip.hwnd = None
+        self._second_parent = None
+
     def _attach(self) -> None:
         taskbar = self._taskbar()
         if not taskbar:
@@ -163,6 +209,7 @@ class Panel:
             if not strip.hwnd:
                 self._detach()
                 return
+        self._attach_second()
         self._anchor = None
         self._paint()
         self._attached.set()
@@ -187,6 +234,7 @@ class Panel:
             if strip.hwnd and api.user32.IsWindow(strip.hwnd):
                 api.user32.DestroyWindow(strip.hwnd)
             strip.hwnd = None
+        self._detach_second()
 
     def _geometry(self, taskbar: int) -> _Geometry:
         notify = api.user32.FindWindowExW(taskbar, None, "TrayNotifyWnd", None)
@@ -199,6 +247,7 @@ class Panel:
             widgets_right=self._widgets.value if left_free else None,
             scale=(api.user32.GetDpiForWindow(taskbar) or 96) / 96,
             light=self._light,
+            second=api.rect(self._second_parent) if self._second_parent else None,
         )
 
     def _paint(self) -> None:
@@ -211,25 +260,59 @@ class Panel:
         margin = round(_MARGIN * g.scale)
         with self._lock:
             right_items, left_items = list(self._right_items), list(self._left_items)
+            second_right, second_left = list(self._second_right_items), list(self._second_left_items)
+        if g.second is None:  # no second monitor: its items stay on the main taskbar
+            right_items, left_items = right_items + second_right, left_items + second_left
+            second_right, second_left = [], []
         if not g.left_free:
             right_items, left_items = left_items + right_items, []
         theme = Theme.for_taskbar(self._light)
 
         image, spans = render(right_items, height, theme, g.scale)
         width = image.width if right_items else 1
-        self._place(self._right, g.notify_left - g.taskbar[0] - width - margin, width, height, image, spans)
+        x = g.notify_left - g.taskbar[0] - width - margin
+        self._place(self._right, x, width, height, image, spans, g.taskbar, g.scale)
 
         image, spans = render(left_items, height, theme, g.scale)
         width = image.width if left_items else 1
         start = g.widgets_right - g.taskbar[0] + margin if g.widgets_right is not None else margin
-        self._place(self._left, start, width, height, image, spans)
+        self._place(self._left, start, width, height, image, spans, g.taskbar, g.scale)
+        if g.second is not None and self._second_parent:
+            self._paint_second(g.second, second_right, second_left, theme)
         self._anchor = g
         if self._hover is not None:
             self._hover.refresh()
 
-    def _place(self, strip: _Strip, x: int, width: int, height: int, image: Image.Image, spans: list[Span]) -> None:
+    def _paint_second(
+        self, tb: tuple[int, int, int, int], right_items: list[Item], left_items: list[Item], theme: Theme
+    ) -> None:
+        """The second monitor's taskbar has no notification area: its right strip keeps clear of the
+        clock Windows 11 shows there (an estimate — measured on no real second monitor yet)."""
+        scale = (api.user32.GetDpiForWindow(self._second_parent) or 96) / 96
+        height = tb[3] - tb[1]
+        margin = round(_MARGIN * scale)
+        image, spans = render(right_items, height, theme, scale)
+        width = image.width if right_items else 1
+        x = tb[2] - tb[0] - width - margin - round(_SECOND_CLOCK * scale)
+        self._place(self._second_right, x, width, height, image, spans, tb, scale)
+        image, spans = render(left_items, height, theme, scale)
+        width = image.width if left_items else 1
+        self._place(self._second_left, margin, width, height, image, spans, tb, scale)
+
+    def _place(
+        self,
+        strip: _Strip,
+        x: int,
+        width: int,
+        height: int,
+        image: Image.Image,
+        spans: list[Span],
+        taskbar: tuple[int, int, int, int],
+        scale: float,
+    ) -> None:
         if not strip.hwnd:
             return
+        strip.taskbar, strip.scale = taskbar, scale
         api.user32.SetWindowPos(strip.hwnd, api.HWND_TOP, x, 0, width, height, api.SWP_NOACTIVATE | api.SWP_SHOWWINDOW)
         blit(strip.hwnd, image.width, height, premultiplied_bgra(image))
         strip.spans = spans
@@ -246,6 +329,10 @@ class Panel:
             self._detach()
             if taskbar:
                 self._attach()
+            return
+        if self._secondary() != self._second_parent:  # a monitor came or went
+            self._attach_second()
+            self._paint()
             return
         self._light = _light_theme()
         if taskbar and self._anchor != self._geometry(taskbar):
@@ -265,6 +352,10 @@ class Panel:
             self._hover.leave()
         PopupMenu(_CLASS, self._menu_entries(), (point.x, point.y), scale, bounds, self._menus)
 
+    def _strip_of(self, hwnd: int) -> _Strip | None:
+        strips = (self._right, self._left, self._second_right, self._second_left)
+        return next((s for s in strips if s.hwnd == hwnd), None)
+
     @staticmethod
     def _span_at(strip: _Strip, lparam: int) -> Span | None:
         x = ctypes.c_short(lparam & 0xFFFF).value
@@ -281,12 +372,12 @@ class Panel:
         if not strip.tracking and strip.hwnd:
             track = api.TRACKMOUSEEVENT(ctypes.sizeof(api.TRACKMOUSEEVENT), api.TME_LEAVE, strip.hwnd, 0)
             strip.tracking = bool(api.user32.TrackMouseEvent(ctypes.byref(track)))
-        if self._hover is None or self._anchor is None or not strip.hwnd:
+        if self._hover is None or not strip.hwnd:
             return
         span = self._span_at(strip, lparam)
         left = api.rect(strip.hwnd)[0]
         centre = left + (span.left + span.right) // 2 if span else left
-        self._hover.point(span.key if span else None, centre, self._anchor.taskbar, self._anchor.scale)
+        self._hover.point(span.key if span else None, centre, strip.taskbar, strip.scale)
 
     def _wndproc(self, hwnd: int, msg: int, wparam: int, lparam: int) -> int:
         try:
@@ -318,8 +409,7 @@ class Panel:
                 if msg == api.WM_DESTROY:
                     api.user32.PostQuitMessage(0)
                     return 0
-            elif hwnd and hwnd in (self._right.hwnd, self._left.hwnd):
-                strip = self._right if hwnd == self._right.hwnd else self._left
+            elif hwnd and (strip := self._strip_of(hwnd)) is not None:
                 if msg == api.WM_RBUTTONUP:
                     self._menu()
                     return 0

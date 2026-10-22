@@ -16,7 +16,6 @@ import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from juice_mate import folders, quit
 from juice_mate.core.alerts import NEWS, Alert, Alerts
@@ -98,11 +97,11 @@ def recent_news() -> list[MenuEntry | None]:
 def open_article(url: str) -> None:
     """Only https links to the news feeds' own sites: the answer of a language model must not be
     able to make Juice-Mate open whatever it writes."""
-    host = urlsplit(url).hostname or ""
-    if urlsplit(url).scheme != "https" or not any(host == d or host.endswith("." + d) for d in news.SITES):
-        log.warning("not opening %s: not a news site", url)
+    safe = news.safe_url(url)
+    if safe is None:
+        log.warning("not opening %r: not a news site link", url)
         return
-    threading.Thread(target=lambda: os.startfile(url), name="open", daemon=True).start()  # noqa: S606
+    threading.Thread(target=lambda: os.startfile(safe), name="open", daemon=True).start()  # noqa: S606
 
 
 def open_target(key: str) -> None:
@@ -418,7 +417,7 @@ def run() -> None:
         latest[0] = {
             it.key: (it, by_key.get(it.key), by_sensor.get(it.key)) for items_ in places.values() for it in items_
         }
-        panel.show(places[RIGHT] + places[SECOND_RIGHT], places[LEFT] + places[SECOND_LEFT])
+        panel.show(places[RIGHT], places[LEFT], places[SECOND_RIGHT], places[SECOND_LEFT])
         wake.wait(TICK_SECONDS)
         wake.clear()
     save_history(batteries)

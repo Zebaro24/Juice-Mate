@@ -12,6 +12,7 @@ import windows_toasts as wt
 
 from juice_mate.core.alerts import Alert
 from juice_mate.core.news import Story
+from juice_mate.sources.news import safe_url
 
 log = logging.getLogger(__name__)
 
@@ -39,12 +40,13 @@ class Toasts:
         clicking the notification itself opens the first one."""
         if self._toaster is None or not stories:
             return
-        linked = [s for s in stories if s.url]
+        # Only links that pass the same gate as the menu's (news.safe_url), in their canonical form.
+        linked = [(s, url) for s in stories if (url := safe_url(s.url)) is not None]
         try:
             toast = wt.Toast(
                 ["Tech news", *(s.text for s in stories[:2])],
-                launch_action=linked[0].url if linked else None,
-                actions=[wt.ToastButton(f"Read · {s.source or 'article'}", launch=s.url) for s in linked[:2]],
+                launch_action=linked[0][1] if linked else None,
+                actions=[wt.ToastButton(f"Read · {s.source or 'article'}", launch=url) for s, url in linked[:2]],
             )
             self._toaster.show_toast(toast)
         except Exception:

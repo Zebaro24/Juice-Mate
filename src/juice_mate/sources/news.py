@@ -17,6 +17,7 @@ from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 from defusedxml import ElementTree as SafeET
@@ -57,14 +58,34 @@ def _published(entry: ET.Element) -> datetime | None:
         return None
 
 
+def safe_url(url: str | None) -> str | None:
+    """The one gate every article link passes before it is kept, shown or opened: https, one of the
+    feeds' own sites, nothing that two URL parsers could read differently (a backslash, user info,
+    a port, whitespace or control characters). Returns the URL rebuilt from its parsed parts — the
+    canonical form is what gets opened, never the raw string."""
+    if not url or any(c in url for c in "\\@") or any(ord(c) <= 32 or ord(c) == 127 for c in url):
+        return None
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return None
+    host = (parts.hostname or "").lower()
+    if parts.scheme != "https" or parts.username or parts.password or port is not None:
+        return None
+    if not any(host == site or host.endswith("." + site) for site in SITES):
+        return None
+    return urlunsplit(("https", host, parts.path or "/", parts.query, ""))
+
+
 def _link(entry: ET.Element) -> str | None:
-    """RSS: <link>text</link>; Atom: <link href=…> (the alternate one when there are several)."""
+    """RSS: <link>text</link>; Atom: <link href=…> (the alternate one). Only a safe link is kept."""
     text = (entry.findtext("link") or "").strip()
-    if text.startswith("http"):
-        return text
+    if text:
+        return safe_url(text)
     for link in entry.findall(_ATOM + "link"):
-        if link.get("rel", "alternate") == "alternate" and (link.get("href") or "").startswith("http"):
-            return link.get("href")
+        if link.get("rel", "alternate") == "alternate":
+            return safe_url(link.get("href"))
     return None
 
 

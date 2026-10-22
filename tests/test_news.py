@@ -97,3 +97,23 @@ def test_the_old_default_question_moves_to_the_new_one(tmp_path: Path) -> None:
     assert Settings.load(path).claude_prompt == DEFAULT_PROMPT
     path.write_text(json.dumps({"claude_prompt": "my own"}), encoding="utf-8")
     assert Settings.load(path).claude_prompt == "my own"
+
+
+@pytest.mark.parametrize(
+    ("url", "safe"),
+    [
+        ("https://www.theverge.com/a?b=1#top", "https://www.theverge.com/a?b=1"),
+        ("https://TechCrunch.com/x", "https://techcrunch.com/x"),
+        ("http://techcrunch.com/x", None),
+        ("https://techcrunch.com.evil.io/x", None),
+        (r"https://evil.io\@techcrunch.com/x", None),
+        ("https://user@techcrunch.com/x", None),
+        ("https://techcrunch.com:8443/x", None),
+        ("https://techcrunch.com/x y", None),
+        ("https://techcrunch.com/\x00x", None),
+        ("javascript:alert(1)", None),
+        ("", None),
+    ],
+)
+def test_only_plain_https_links_to_the_feeds_pass(url: str, safe: str | None) -> None:
+    assert news.safe_url(url) == safe
