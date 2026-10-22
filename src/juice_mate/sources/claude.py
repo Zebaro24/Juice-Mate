@@ -30,6 +30,12 @@ STALE_AFTER = 3600.0  # the last good numbers stay on the panel, marked, for up 
 CREDENTIALS = Path.home() / ".claude" / ".credentials.json"
 NAME = "Claude"
 SIGNED_OUT = "signed out — open Claude Code to sign in again"
+EXPIRED = "token expired — opening Claude Code renews it"
+
+
+class _ExpiredError(PermissionError):
+    """The access token's time is up. Claude Code renews it on its next run, so the file is read
+    again on every poll until it does — no request is made with an expired token."""
 
 
 class Claude:
@@ -116,7 +122,7 @@ class Claude:
             return None
         expires = oauth.get("expiresAt")
         if isinstance(expires, int | float) and expires / 1000 <= now:
-            raise PermissionError(SIGNED_OUT)
+            raise _ExpiredError(EXPIRED)
         return token
 
     def _fetch(self, now: float) -> None:
@@ -138,6 +144,8 @@ class Claude:
             response.raise_for_status()
             self._windows = parse(response.json())
         except PermissionError as e:
+            if isinstance(e, _ExpiredError):
+                self._next_request = now  # a renewed token shows on the next poll, not three minutes later
             self._windows, self._failure = [], str(e)  # a signed-out account's old numbers mean nothing
             return
         except UsageFormatError as e:

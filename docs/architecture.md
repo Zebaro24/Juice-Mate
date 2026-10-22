@@ -61,7 +61,7 @@ A failing source returns an error reading, never raises into the poll loop.
 
 - Token: Claude Code's OAuth token from `~/.claude/.credentials.json`. **Read only. Never refresh it** —
   refreshing rotates the token and logs Claude Code out. Expired token → "re-open Claude Code" state,
-  not a refresh.
+  not a refresh; the file is re-read every poll (no request) so a token Claude Code renews shows at once.
 - Request (confirmed 2026-10-21): `GET https://api.anthropic.com/api/oauth/usage`, headers
   `Authorization: Bearer <accessToken>` and `anthropic-beta: oauth-2025-04-20` → `five_hour` and
   `seven_day`, each `{utilization: % used, resets_at: ISO time}`. The answer also carries a dozen

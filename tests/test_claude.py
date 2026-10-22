@@ -96,8 +96,19 @@ def test_an_expired_token_is_not_refreshed(tmp_path: Path) -> None:
     http = Http()
     [reading] = Claude(credentials(tmp_path, expires_ms=1000), http, clock=lambda: 1.8e9).poll()
     assert reading.error is not None
-    assert "open Claude Code" in reading.error
+    assert "opening Claude Code" in reading.error
     assert http.calls == []
+
+
+def test_a_renewed_token_is_picked_up_on_the_next_poll(tmp_path: Path) -> None:
+    path, now = credentials(tmp_path, expires_ms=1000), [1.8e9]
+    claude = Claude(path, Http(), clock=lambda: now[0])
+    [reading] = claude.poll()
+    assert reading.error is not None
+    credentials(tmp_path)  # Claude Code ran and renewed the token
+    now[0] += 1
+    session, _ = claude.poll()
+    assert (session.error, session.percent) == (None, 10)
 
 
 @pytest.mark.parametrize(

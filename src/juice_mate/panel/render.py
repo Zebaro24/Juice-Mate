@@ -82,6 +82,7 @@ def _width(font: Font, text: str) -> int:
 
 _SUPERSAMPLE = 4
 _DILATE = 3  # a 3×3 max filter at 4×: each stroke grows by about a quarter pixel per side
+_DILATE_SYMBOL = 5  # Segoe UI Symbol's spokes are thinner still: half a pixel per side
 
 
 @cache
@@ -92,7 +93,8 @@ def _glyph_mask(glyph: str, size: int) -> Image.Image:
     volume glyphs. Drawing at 4×, growing every stroke, and scaling down matches their weight
     without smearing the detail (a keyboard's keys stay apart).
     """
-    names = _ICON_FONTS if ord(glyph[0]) in _PRIVATE_USE else _SYMBOL_FONTS
+    icon = ord(glyph[0]) in _PRIVATE_USE
+    names = _ICON_FONTS if icon else _SYMBOL_FONTS
     big = _font(names, size * _SUPERSAMPLE)
     left, top, right, bottom = big.getbbox(glyph)
     pad = 2 * _SUPERSAMPLE
@@ -103,7 +105,7 @@ def _glyph_mask(glyph: str, size: int) -> Image.Image:
     mask = Image.new("L", (width, height), 0)
     y = pad + (size * _SUPERSAMPLE - (bottom - top)) / 2 - top
     ImageDraw.Draw(mask).text((pad - left, y), glyph, font=big, fill=255)
-    mask = mask.filter(ImageFilter.MaxFilter(_DILATE))
+    mask = mask.filter(ImageFilter.MaxFilter(_DILATE if icon else _DILATE_SYMBOL))
     return mask.resize((width // _SUPERSAMPLE, height // _SUPERSAMPLE), Image.Resampling.LANCZOS)
 
 
