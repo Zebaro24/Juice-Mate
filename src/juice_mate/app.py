@@ -33,7 +33,10 @@ from juice_mate.sources.system import (
     GpuLoad,
     GpuTemperature,
     MemoryLoad,
+    MemoryUsed,
     NetworkSpeed,
+    Ping,
+    VideoMemoryUsed,
 )
 
 log = logging.getLogger("juice_mate")
@@ -64,6 +67,9 @@ def sensors() -> list[Sensor]:
         GpuLoad(),
         GpuTemperature(),
         MemoryLoad(),
+        MemoryUsed(),
+        VideoMemoryUsed(),
+        Ping(),
         DiskUsage("C:\\"),
         DiskSpeed("read"),
         DiskSpeed("write"),
@@ -98,7 +104,7 @@ def dump() -> None:
     all_sensors = sensors()
     time.sleep(1)  # rates and loads need an interval
     for m in (s.read() for s in all_sensors):
-        unit = "" if m.unit is Unit.CELSIUS else m.unit  # short() already writes "52°"
+        unit = "" if m.unit in (Unit.CELSIUS, Unit.BYTES, Unit.MILLISECONDS) else m.unit  # short() writes "52°", "8G"
         print(f"  {m.name:<32} {short(m):>6} {unit:<3}  {m.error or ''}")
 
 

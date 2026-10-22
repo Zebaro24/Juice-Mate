@@ -7,13 +7,14 @@ after construction already has a value: the constructor takes the baseline.
 import contextlib
 import ctypes
 import re
+import threading
 import time
 from collections.abc import Callable, Mapping
 from ctypes import wintypes
 
 import psutil
 
-from juice_mate.core.metric import Metric, Unit
+from juice_mate.core.metric import OFFLINE, Metric, Unit
 
 
 def _failed(sensor: str, name: str, unit: Unit, error: Exception | str) -> Metric:
@@ -180,24 +181,24 @@ _PDH_VALID = {0, 1}  # PDH_CSTATUS_VALID_DATA, PDH_CSTATUS_NEW_DATA
 _GPU_COUNTER = r"\GPU Engine(*engtype_3D)\Utilization Percentage"
 
 
-class GpuLoad:
-    sensor = "gpu.load"
-    name = "GPU"
+class _PdhArray:
+    """One wildcard PDH counter, read as {instance: value}. A rate counter needs two samples, so the
+    first one is taken at construction."""
 
-    def __init__(self) -> None:
+    def __init__(self, path: str) -> None:
         self._pdh = ctypes.WinDLL("pdh")
         self._query = wintypes.HANDLE()
         self._counter = wintypes.HANDLE()
-        self._error: str | None = None
+        self.error: str | None = None
         status = self._pdh.PdhOpenQueryW(None, None, ctypes.byref(self._query))
         if status == 0:
-            status = self._pdh.PdhAddEnglishCounterW(self._query, _GPU_COUNTER, None, ctypes.byref(self._counter))
+            status = self._pdh.PdhAddEnglishCounterW(self._query, path, None, ctypes.byref(self._counter))
         if status == 0:
-            self._pdh.PdhCollectQueryData(self._query)  # a rate counter needs two samples
+            self._pdh.PdhCollectQueryData(self._query)
         else:
-            self._error = f"PDH status 0x{status & 0xFFFFFFFF:08X}"
+            self.error = f"PDH status 0x{status & 0xFFFFFFFF:08X}"
 
-    def _instances(self) -> dict[str, float]:
+    def instances(self) -> dict[str, float]:
         status = self._pdh.PdhCollectQueryData(self._query)
         if status != 0:
             raise OSError(f"PdhCollectQueryData 0x{status & 0xFFFFFFFF:08X}")
@@ -215,18 +216,88 @@ class GpuLoad:
         items = ctypes.cast(buffer, ctypes.POINTER(_PdhItem))
         return {items[i].name: items[i].value.value for i in range(count.value) if items[i].value.status in _PDH_VALID}
 
-    def read(self) -> Metric:
-        if self._error:
-            return _failed(self.sensor, self.name, Unit.PERCENT, self._error)
-        try:
-            return Metric(self.sensor, self.name, gpu_load(self._instances()), Unit.PERCENT)
-        except Exception as e:
-            return _failed(self.sensor, self.name, Unit.PERCENT, e)
-
     def close(self) -> None:
         if self._query:
             self._pdh.PdhCloseQuery(self._query)
             self._query = wintypes.HANDLE()
+
+
+class GpuLoad:
+    sensor = "gpu.load"
+    name = "GPU"
+
+    def __init__(self) -> None:
+        self._counter = _PdhArray(_GPU_COUNTER)
+
+    def read(self) -> Metric:
+        if self._counter.error:
+            return _failed(self.sensor, self.name, Unit.PERCENT, self._counter.error)
+        try:
+            return Metric(self.sensor, self.name, gpu_load(self._counter.instances()), Unit.PERCENT)
+        except Exception as e:
+            return _failed(self.sensor, self.name, Unit.PERCENT, e)
+
+    def close(self) -> None:
+        self._counter.close()
+
+
+# ── Memory in gigabytes: RAM from psutil, VRAM as Task Manager counts it ────
+
+_VRAM_COUNTER = r"\GPU Adapter Memory(*)\Dedicated Usage"
+_DISPLAY_CLASS = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+
+
+def video_memory_total() -> float | None:
+    """The largest adapter's memory in bytes, as the driver reports it to Windows; None if unknown."""
+    import winreg
+
+    sizes = []
+    with contextlib.suppress(OSError), winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, _DISPLAY_CLASS) as root:
+        for index in range(64):
+            try:
+                name = winreg.EnumKey(root, index)
+            except OSError:
+                break
+            with contextlib.suppress(OSError), winreg.OpenKey(root, name) as adapter:
+                value, _kind = winreg.QueryValueEx(adapter, "HardwareInformation.qwMemorySize")
+                if isinstance(value, int):
+                    sizes.append(float(value))
+    return max(sizes, default=None)
+
+
+class MemoryUsed:
+    sensor = "memory.used"
+    name = "RAM used"
+
+    def read(self) -> Metric:
+        try:
+            memory = psutil.virtual_memory()
+            return Metric(self.sensor, self.name, float(memory.used), Unit.BYTES, total=float(memory.total))
+        except Exception as e:
+            return _failed(self.sensor, self.name, Unit.BYTES, e)
+
+
+class VideoMemoryUsed:
+    """Dedicated video memory in use on the busiest adapter — the "Dedicated GPU memory" of Task Manager."""
+
+    sensor = "gpu.memory"
+    name = "VRAM used"
+
+    def __init__(self) -> None:
+        self._counter = _PdhArray(_VRAM_COUNTER)
+        self._total = video_memory_total()
+
+    def read(self) -> Metric:
+        if self._counter.error:
+            return _failed(self.sensor, self.name, Unit.BYTES, self._counter.error)
+        try:
+            used = max(self._counter.instances().values(), default=0.0)
+            return Metric(self.sensor, self.name, used, Unit.BYTES, total=self._total)
+        except Exception as e:
+            return _failed(self.sensor, self.name, Unit.BYTES, e)
+
+    def close(self) -> None:
+        self._counter.close()
 
 
 # ── GPU temperature: NVML, shipped with the NVIDIA driver ───────────────────
@@ -276,3 +347,112 @@ class GpuTemperature:
         if self._initialised:
             self._nvml.nvmlShutdown()
             self._initialised = False
+
+
+# ── Ping: ICMP echo through iphlpapi — no admin, no raw socket ───────────────
+
+PING_TARGET = "1.1.1.1"  # Cloudflare's resolver: answers ICMP everywhere, rarely blocked
+PING_EVERY = 2.0
+PING_TIMEOUT_MS = 1000
+PING_MISSES_OFFLINE = 2  # one lost packet is noise; two in a row is "the internet is gone"
+
+
+class _IpOptions(ctypes.Structure):
+    _fields_ = [
+        ("ttl", ctypes.c_ubyte),
+        ("tos", ctypes.c_ubyte),
+        ("flags", ctypes.c_ubyte),
+        ("size", ctypes.c_ubyte),
+        ("data", ctypes.c_void_p),
+    ]
+
+
+class _EchoReply(ctypes.Structure):
+    _fields_ = [
+        ("address", wintypes.ULONG),
+        ("status", wintypes.ULONG),
+        ("round_trip", wintypes.ULONG),
+        ("data_size", wintypes.USHORT),
+        ("reserved", wintypes.USHORT),
+        ("data", ctypes.c_void_p),
+        ("options", _IpOptions),
+    ]
+
+
+def ping_once(target: str = PING_TARGET, timeout_ms: int = PING_TIMEOUT_MS) -> float | None:
+    """Round trip in milliseconds, or None when nothing answered in time. Raises OSError if ICMP
+    itself is unavailable."""
+    import socket
+
+    iphlpapi = ctypes.WinDLL("iphlpapi", use_last_error=True)
+    iphlpapi.IcmpCreateFile.restype = wintypes.HANDLE
+    iphlpapi.IcmpSendEcho.argtypes = [
+        wintypes.HANDLE,
+        wintypes.ULONG,
+        ctypes.c_void_p,
+        wintypes.WORD,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        wintypes.DWORD,
+    ]
+    iphlpapi.IcmpCloseHandle.argtypes = [wintypes.HANDLE]
+    handle = iphlpapi.IcmpCreateFile()
+    if not handle or handle == wintypes.HANDLE(-1).value:
+        raise OSError(f"IcmpCreateFile failed ({ctypes.get_last_error()})")
+    try:
+        # IPAddr is the address's bytes in network order, read as a little-endian ULONG.
+        address = int.from_bytes(socket.inet_aton(target), "little")
+        payload = b"juice-mate"
+        size = ctypes.sizeof(_EchoReply) + len(payload) + 16
+        reply = ctypes.create_string_buffer(size)
+        answers = iphlpapi.IcmpSendEcho(handle, address, payload, len(payload), None, reply, size, timeout_ms)
+        if answers == 0:
+            return None
+        echo = _EchoReply.from_buffer(reply)
+        return float(echo.round_trip) if echo.status == 0 else None
+    finally:
+        iphlpapi.IcmpCloseHandle(handle)
+
+
+class Ping:
+    """Latency to PING_TARGET, measured on a thread of its own: a lost packet waits a whole second,
+    which the poll loop must not."""
+
+    sensor = "net.ping"
+    name = "Ping"
+
+    def __init__(self, probe: Callable[[], float | None] = ping_once, start: bool = True) -> None:
+        self._probe = probe
+        self._value: float | None = None
+        self._misses = 0
+        self._error: str | None = "measuring…"
+        self._stop = threading.Event()
+        if start:
+            threading.Thread(target=self._loop, name="ping", daemon=True).start()
+
+    def _loop(self) -> None:
+        while not self._stop.is_set():
+            self.measure()
+            self._stop.wait(PING_EVERY)
+
+    def measure(self) -> None:
+        try:
+            rtt = self._probe()
+        except Exception as e:
+            self._value, self._error = None, str(e)[:80]
+            return
+        if rtt is None:
+            self._misses += 1
+            if self._misses >= PING_MISSES_OFFLINE:
+                self._value, self._error = None, OFFLINE
+            return
+        self._misses, self._value, self._error = 0, rtt, None
+
+    def read(self) -> Metric:
+        if self._value is None:
+            return _failed(self.sensor, self.name, Unit.MILLISECONDS, self._error or OFFLINE)
+        return Metric(self.sensor, self.name, self._value, Unit.MILLISECONDS)
+
+    def close(self) -> None:
+        self._stop.set()

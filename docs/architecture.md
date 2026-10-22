@@ -141,6 +141,9 @@ decides later — the classes exist so that choice is configuration, not code.
 | `DiskSpeed("read" / "write")` | bytes/s | `psutil.disk_io_counters()` delta |
 | `GpuLoad` | % | PDH counter `\GPU Engine(*engtype_3D)\Utilization Percentage` — what Task Manager shows |
 | `GpuTemperature` | °C | NVML (`nvml.dll`, ships with the NVIDIA driver); no NVIDIA → `error` |
+| `MemoryUsed` | bytes (`21.3G`) | `psutil.virtual_memory().used`; the total in the tooltip |
+| `VideoMemoryUsed` | bytes | PDH `\GPU Adapter Memory(*)\Dedicated Usage`, the busiest adapter; total from the display class key's `HardwareInformation.qwMemorySize`. A sleeping laptop GPU reads 0 |
+| `Ping` | ms (`23ms`) | `IcmpSendEcho` (iphlpapi, no admin) to 1.1.1.1 every 2 s on its own thread; two misses in a row → `off` in red |
 
 On the panel (2026-10-21): each sensor is an item in the `system` group — ↑/↓ arrows (70 % size, they
 fill the em box), a chip for CPU, a card for GPU, a thermometer, a memory chip, a drive — refreshed

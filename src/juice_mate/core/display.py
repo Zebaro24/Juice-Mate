@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from juice_mate.core.metric import Metric, Unit, short
+from juice_mate.core.metric import OFFLINE, Metric, Unit, short
 from juice_mate.core.reading import HIGH_USAGE_PERCENT, LOW_PERCENT, Kind, Level, Reading, level
 
 GLYPHS: dict[Kind, str] = {
@@ -108,6 +108,7 @@ def item(
 SENSOR_GLYPHS: dict[str, str] = {
     "net.up": chr(0xE74A),  # Up
     "net.down": chr(0xE74B),  # Down
+    "net.ping": chr(0xE774),  # Globe: the internet, answering or not
     "cpu": chr(0xE950),  # Component: a chip
     "gpu": chr(0xE964),  # a graphics card
     "gpu.temperature": chr(0xE9CA),  # Thermometer
@@ -115,6 +116,8 @@ SENSOR_GLYPHS: dict[str, str] = {
     "disk": chr(0xEDA2),  # a drive
 }
 HOT_CELSIUS = 85
+# The widest ordinary value per unit: the number slot never narrows below it.
+RESERVE = {Unit.BYTES_PER_SECOND: "000K", Unit.CELSIUS: "00°", Unit.BYTES: "00.0G", Unit.MILLISECONDS: "00ms"}
 BUSY_PERCENT = 95
 
 
@@ -127,24 +130,32 @@ def _sensor_glyph(sensor: str) -> str:
 
 
 def metric_item(metric: Metric, now: datetime, busy: int = BUSY_PERCENT, hot: int = HOT_CELSIUS) -> Item:
-    """A sensor as a panel item: its glyph and a short value — `1.2M`, `37%`, `52°`."""
+    """A sensor as a panel item: its glyph and a short value — `1.2M`, `37%`, `52°`, `21.3G`, `23ms`.
+    A ping that gets no answer is `off`, red: the internet is gone, which is news, not a failure."""
     value = metric.value
-    hot = value is not None and (
-        (metric.unit is Unit.CELSIUS and value >= hot) or (metric.unit is Unit.PERCENT and value >= busy)
+    offline = metric.error == OFFLINE
+    alarm = offline or (
+        value is not None
+        and ((metric.unit is Unit.CELSIUS and value >= hot) or (metric.unit is Unit.PERCENT and value >= busy))
     )
     text = short(metric) + ("%" if metric.unit is Unit.PERCENT and value is not None else "")
-    state = metric.error or f"{text}{'/s' if metric.unit is Unit.BYTES_PER_SECOND else ''}"
+    if metric.error:
+        state = metric.error
+    elif metric.unit is Unit.BYTES and value is not None and metric.total:
+        state = f"{value / 1024**3:.1f} / {metric.total / 1024**3:.1f} GB"
+    else:
+        state = f"{text}{'/s' if metric.unit is Unit.BYTES_PER_SECOND else ''}"
     return Item(
         key=f"system:{metric.sensor}",
         glyph=_sensor_glyph(metric.sensor),
-        text=UNAVAILABLE if value is None else text,
-        tone=Tone.DIM if value is None else Tone.CRITICAL if hot else Tone.NORMAL,
+        text="off" if offline else UNAVAILABLE if value is None else text,
+        tone=Tone.CRITICAL if alarm else Tone.DIM if value is None else Tone.NORMAL,
         charging=False,
         tag="",
         group="system",
         tooltip=f"{metric.name} — {state} · {now:%H:%M}"[:127],
-        reserve={Unit.BYTES_PER_SECOND: "000K", Unit.CELSIUS: "00°"}.get(metric.unit, "00%"),
-        # The arrows fill the whole em box; at full size the two rows merge into one "↕".
+        reserve=RESERVE.get(metric.unit, "00%"),
+        # The arrows fill the whole em box; at full size the two rows merge into one "↕". The globe too.
         glyph_scale=0.7 if metric.sensor.startswith("net.") else 1.0,
     )
 
