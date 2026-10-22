@@ -106,6 +106,7 @@ class Claude:
                     tag=w.tag,
                     note=summary([w], now_utc) + pace + suffix,
                     limit_at=eta,
+                    resets_at=w.resets_at.astimezone() if w.resets_at else None,
                 )
             )
         return readings

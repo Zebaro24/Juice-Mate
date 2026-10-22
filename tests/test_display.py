@@ -92,3 +92,22 @@ def test_a_usage_window_that_runs_out_before_it_resets_is_red() -> None:
     assert item(usage, NOW).tone is Tone.NORMAL
     assert item(reading(kind=Kind.CLAUDE, percent=40, limit_at=NOW), NOW).tone is Tone.CRITICAL
     assert item(reading(kind=Kind.CLAUDE, percent=85), NOW).tone is Tone.CRITICAL
+
+
+def test_a_usage_window_shows_its_reset_time() -> None:
+    from datetime import timedelta
+
+    from juice_mate.core.display import reset_suffix
+
+    soon, later = NOW + timedelta(hours=2, minutes=30), NOW + timedelta(days=4)
+    assert reset_suffix(soon, NOW) == f"→{soon:%H:%M}"
+    assert reset_suffix(later, NOW) == f"→{later:%d.%m}"
+    usage = reading(kind=Kind.CLAUDE, percent=45, tag="5h", resets_at=soon)
+    assert item(usage, NOW, reset_time=True).suffix == f"→{soon:%H:%M}"
+    assert item(usage, NOW).suffix == ""
+
+
+def test_left_instead_of_used_keeps_the_colour_of_used() -> None:
+    usage = reading(kind=Kind.CLAUDE, percent=85)
+    shown = item(usage, NOW, left=True)
+    assert (shown.text, shown.tone) == ("15%", Tone.CRITICAL)

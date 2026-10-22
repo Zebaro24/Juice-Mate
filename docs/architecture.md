@@ -78,7 +78,10 @@ A failing source returns an error reading, never raises into the poll loop.
   code-named experimental keys — **only those two are read**; parsing lives in `core/usage.py`, and an
   answer that no longer fits becomes "the usage answer changed", never a crash.
 - On the panel: the ✳ glyph (Segoe UI Symbol) + % used, rounded down like Claude Code's `/usage`;
-  red from 80 % or when the pace runs the window out before it resets.
+  red from 80 % or when the pace runs the window out before it resets. Then the reset time, quiet as
+  the tag: `5h 45% →16:00`, `7d 66% →26.10` — a time within a day, a date further off (owner,
+  2026-10-22; `claude_reset_time`). `claude_left` shows what is left instead; the colour still
+  follows what is used.
   Tooltip: both windows with the time to reset. 429 → five minutes' pause; 401/403 → "open Claude Code".
 - One request every three minutes (once a minute drew 429s after an hour); on 429 a pause of 5 min,
   doubling to 30. A passing failure keeps the last numbers on the panel with "as of HH:MM" in the

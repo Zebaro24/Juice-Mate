@@ -130,7 +130,8 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
 
     Inside a column every item has the same slots — glyph, then a tag or a bolt, then the number
     right-aligned in a slot at least as wide as "00%" — so 9% → 10% or 88% → 89% moves nothing and
-    the % signs line up; only a 100% widens its column.
+    the % signs line up; only a 100% widens its column. A suffix (`→16:00`) follows the number in
+    its own slot, as quiet as a tag.
     """
     glyph_px, bolt_px = round(GLYPH_PX * scale), round(BOLT_PX * scale)
     text_font = _font(_TEXT_FONTS, round(TEXT_PX * scale))
@@ -164,7 +165,10 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
         glyph_slot = max(glyph_width(it) for it in column)
         prefix_slot = max(prefix_width(it) for it in column)
         slot = max([_width(text_font, it.reserve) for it in column] + [_width(text_font, it.text) for it in column])
-        layout.append((column, glyph_slot, prefix_slot, slot, glyph_slot + gap_inner + prefix_slot + slot))
+        suffix_slot = max((_width(text_font, it.suffix) + gap_inner if it.suffix else 0) for it in column)
+        layout.append(
+            (column, glyph_slot, prefix_slot, slot, glyph_slot + gap_inner + prefix_slot + slot + suffix_slot)
+        )
     gaps = [
         round((GAP_GROUP if left[0][-1].group != right[0][0].group else GAP_COLUMN) * scale)
         for left, right in zip(layout, layout[1:], strict=False)
@@ -190,9 +194,13 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
                 )
             elif it.charging:
                 _paste_glyph(image, BOLT, bolt_px, cursor, mid, fill)
+            right = cursor + prefix_slot + slot
             if it.text:
-                right = cursor + prefix_slot + slot
                 canvas.text((round(right), round(mid) + to_baseline), it.text, font=text_font, fill=fill, anchor="rs")
+            if it.suffix:
+                quiet = (*colour, min(fill[3], TAG_ALPHA))
+                at = (round(right + gap_inner), round(mid) + to_baseline)
+                canvas.text(at, it.suffix, font=text_font, fill=quiet, anchor="ls")
             # Hover areas split the column at the middle: top item above, bottom item below.
             top, bottom = (0, height // 2) if row == 0 else (height // 2, height)
             if len(column) == 1:

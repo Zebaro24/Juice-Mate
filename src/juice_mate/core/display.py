@@ -5,7 +5,7 @@ Glyphs are code points of Segoe Fluent Icons (Windows 11) — the same codes exi
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from juice_mate.core.metric import Metric, Unit, short
@@ -44,6 +44,7 @@ class Item:
     tooltip: str
     reserve: str = "00%"  # the widest ordinary value: the number slot never narrows below it
     glyph_scale: float = 1.0  # tall glyphs (arrows) shrink so two rows do not touch
+    suffix: str = ""  # after the number, quiet: a usage window's reset time, `→16:00`
 
 
 def tooltip(reading: Reading, now: datetime) -> str:
@@ -60,12 +61,32 @@ def tooltip(reading: Reading, now: datetime) -> str:
     return f"{reading.name} — {state} · {now:%H:%M}"[:127]
 
 
-def item(reading: Reading, now: datetime, low: int = LOW_PERCENT, high: int = HIGH_USAGE_PERCENT) -> Item:
+def reset_suffix(resets_at: datetime | None, now: datetime) -> str:
+    """`→16:00` within a day, `→26.10` further off (owner, 2026-10-22). `now` is naive local time;
+    `resets_at` local, aware or not."""
+    if resets_at is None:
+        return ""
+    local = resets_at.replace(tzinfo=None)
+    return f"→{local:%H:%M}" if local - now < timedelta(hours=24) else f"→{local:%d.%m}"
+
+
+def item(
+    reading: Reading,
+    now: datetime,
+    low: int = LOW_PERCENT,
+    high: int = HIGH_USAGE_PERCENT,
+    reset_time: bool = False,
+    left: bool = False,
+) -> Item:
+    """For a usage window, `reset_time` adds `→16:00` and `left` shows what is left instead of what is
+    used; the colour still follows what is used."""
     lvl = level(reading, low, high)
     unavailable = reading.error is not None
     offline = lvl is Level.OFFLINE
     has_number = not offline and not unavailable and reading.percent is not None
-    text = f"{reading.percent}%" if has_number else UNAVAILABLE if unavailable else ""
+    usage = reading.kind is Kind.CLAUDE
+    shown = 100 - reading.percent if usage and left and reading.percent is not None else reading.percent
+    text = f"{shown}%" if has_number else UNAVAILABLE if unavailable else ""
     # Red is "act now": a battery under 20%, a usage window past 80%, or one that runs out before it
     # resets at the pace of the last hour.
     critical = lvl is Level.LOW or (has_number and reading.limit_at is not None)
@@ -76,8 +97,9 @@ def item(reading: Reading, now: datetime, low: int = LOW_PERCENT, high: int = HI
         tone=Tone.CRITICAL if critical else Tone.DIM if (offline or unavailable) else Tone.NORMAL,
         charging=lvl is Level.CHARGING,
         tag=reading.tag or "",
-        group="usage" if reading.kind is Kind.CLAUDE else "devices",
+        group="usage" if usage else "devices",
         tooltip=tooltip(reading, now),
+        suffix=reset_suffix(reading.resets_at, now) if usage and reset_time and has_number else "",
     )
 
 
@@ -130,7 +152,14 @@ def metric_item(metric: Metric, now: datetime, busy: int = BUSY_PERCENT, hot: in
 ORDER = [Kind.CLAUDE, Kind.KEYBOARD, Kind.MOUSE, Kind.HEADSET, Kind.GAMEPAD, Kind.PHONE, Kind.OTHER]
 
 
-def items(readings: list[Reading], now: datetime, low: int = LOW_PERCENT, high: int = HIGH_USAGE_PERCENT) -> list[Item]:
+def items(
+    readings: list[Reading],
+    now: datetime,
+    low: int = LOW_PERCENT,
+    high: int = HIGH_USAGE_PERCENT,
+    reset_time: bool = False,
+    left: bool = False,
+) -> list[Item]:
     """What the panel shows, in a stable order: by kind, then name — items do not jump around.
 
     A disconnected device is not shown at all (owner, 2026-10-21): a cached number says nothing, and a
@@ -138,4 +167,4 @@ def items(readings: list[Reading], now: datetime, low: int = LOW_PERCENT, high: 
     """
     shown = [r for r in readings if level(r) is not Level.OFFLINE]
     ordered = sorted(shown, key=lambda r: (ORDER.index(r.kind), r.device_id, r.name.lower()))
-    return [item(r, now, low, high) for r in ordered]
+    return [item(r, now, low, high, reset_time, left) for r in ordered]

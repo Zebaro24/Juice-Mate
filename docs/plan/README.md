@@ -21,7 +21,7 @@ Ordered by dependency. ✅ done · ⚠️ written, not verified on the real targ
 | 08 | System sensors on the panel with a Show menu; usage pace forecast and alerts; click-to-open; then the owner uninstalls TrafficMonitor | ✅ · ⚠️ TrafficMonitor still installed (owner's call) |
 | 09 | Install on both PCs, uninstall Hator Hub and Frida | ✅ owner's PC: v0.3.0 installed, self-updated to 0.3.1; Hator Hub removed (owner), Frida (pip `frida`, `frida-tools`) removed · ⚠️ second PC not yet |
 | 10 | Settings model: sources on/off (Sources menu), device name / hide / order / icon, thresholds and per-kind notification switches, per-item placement — all in settings.json, read live | ✅ |
-| 11 | Claude display: `5h 45% →16:00`, `7d 66% →26.10` (reset time, switchable), used or left | |
+| 11 | Claude display: `5h 45% →16:00`, `7d 66% →26.10` (reset time, switchable), used or left | ✅ |
 | 12 | New sensors, nothing to install: ping with "offline", RAM and VRAM in GB | |
 | 13 | Settings window (tkinter + sv-ttk, Windows 11 look): everything of step 10 without editing JSON, icon picker for devices | |
 | 14 | Popup on click: every reading, reset times, mini charts of the last hour | |

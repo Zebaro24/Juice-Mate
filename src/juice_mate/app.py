@@ -127,7 +127,14 @@ def panel_items(
     readings: list[Reading], metrics: list[Metric], settings: Settings, now: datetime
 ) -> dict[str, list[Item]]:
     """Readings and sensor values → items per place, with the owner's names, icons, thresholds, order."""
-    shown = items(personalise(readings, settings.device_prefs()), now, settings.battery_low, settings.usage_high)
+    shown = items(
+        personalise(readings, settings.device_prefs()),
+        now,
+        settings.battery_low,
+        settings.usage_high,
+        settings.claude_reset_time,
+        settings.claude_left,
+    )
     shown += [metric_item(m, now, settings.busy_percent, settings.hot_celsius) for m in metrics]
     return arrange(shown, settings.order, settings.placement)
 

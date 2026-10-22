@@ -43,6 +43,7 @@ class Reading:
     note: str | None = None  # replaces the default state text in the tooltip
     tag: str | None = None  # a short label drawn before the number ("5h", "7d")
     limit_at: datetime | None = None  # usage only: when the window runs out at the current pace
+    resets_at: datetime | None = None  # usage only: when the window resets, local time
 
 
 def level(reading: Reading, low: int = LOW_PERCENT, high: int = HIGH_USAGE_PERCENT) -> Level:
