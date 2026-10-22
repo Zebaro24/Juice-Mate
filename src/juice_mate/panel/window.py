@@ -27,6 +27,7 @@ from juice_mate.core.display import Item
 from juice_mate.panel import win32 as api
 from juice_mate.panel.hover import Hover
 from juice_mate.panel.layered import blit
+from juice_mate.panel.menu import MenuEntry, PopupMenu
 from juice_mate.panel.render import Span, Theme, premultiplied_bgra, render
 from juice_mate.panel.uia import LeftEdge, centred_taskbar
 
@@ -37,16 +38,6 @@ _WM_UPDATE = api.WM_APP + 1
 _WATCHDOG_TIMER = 1
 _WATCHDOG_MS = 2000
 _MARGIN = 8  # gap between a strip and its neighbour (notification area, Widgets button), at 96 DPI
-
-
-@dataclass(frozen=True)
-class MenuEntry:
-    """One right-click menu line; `None` in the list is a separator. With `children` it is a submenu."""
-
-    label: str
-    action: Callable[[], None] | None = None
-    checked: bool = False
-    children: "list[MenuEntry | None] | None" = None
 
 
 @dataclass
@@ -96,6 +87,7 @@ class Panel:
         self._on_click = on_click
         self._card_for = card_for
         self._hover: Hover | None = None
+        self._menus: dict[int, PopupMenu] = {}  # open menu windows by hwnd: their messages go to them
         self._lock = threading.Lock()
         self._right_items: list[Item] = []
         self._left_items: list[Item] = []
@@ -259,32 +251,19 @@ class Panel:
         if taskbar and self._anchor != self._geometry(taskbar):
             self._paint()
 
-    def _build(self, entries: list[MenuEntry | None], actions: list[Callable[[], None]]) -> int:
-        """A Win32 menu for `entries`; every action gets the command id `index + 1` in `actions`."""
-        menu: int = api.user32.CreatePopupMenu()
-        for entry in entries:
-            if entry is None:
-                api.user32.AppendMenuW(menu, api.MF_SEPARATOR, 0, None)
-            elif entry.children is not None:
-                submenu = self._build(entry.children, actions)
-                api.user32.AppendMenuW(menu, api.MF_STRING | api.MF_POPUP, submenu, entry.label)
-            else:
-                flags = api.MF_STRING | (api.MF_CHECKED if entry.checked else 0)
-                actions.append(entry.action or (lambda: None))
-                api.user32.AppendMenuW(menu, flags, len(actions), entry.label)
-        return menu
-
     def _menu(self) -> None:
-        actions: list[Callable[[], None]] = []
-        menu = self._build(self._menu_entries(), actions)
+        """Juice-Mate's own menu (menu.py), above the cursor, kept between the taskbar's ends."""
+        for menu in list(self._menus.values()):
+            if menu.parent is None:
+                menu.close()
         point = w.POINT()
         api.user32.GetCursorPos(ctypes.byref(point))
-        api.user32.SetForegroundWindow(self._control)
-        flags = api.TPM_RETURNCMD | api.TPM_RIGHTBUTTON | api.TPM_BOTTOMALIGN
-        command = api.user32.TrackPopupMenu(menu, flags, point.x, point.y, 0, self._control, None)
-        api.user32.DestroyMenu(menu)  # destroys the submenus with it
-        if 1 <= command <= len(actions):
-            actions[command - 1]()
+        taskbar = self._anchor.taskbar if self._anchor else (0, point.y, point.x + 1, point.y)
+        scale = self._anchor.scale if self._anchor else 1.0
+        bounds = (taskbar[0], 0, taskbar[2], taskbar[1])  # the screen above the taskbar
+        if self._hover is not None:
+            self._hover.leave()
+        PopupMenu(_CLASS, self._menu_entries(), (point.x, point.y), scale, bounds, self._menus)
 
     @staticmethod
     def _span_at(strip: _Strip, lparam: int) -> Span | None:
@@ -311,6 +290,9 @@ class Panel:
 
     def _wndproc(self, hwnd: int, msg: int, wparam: int, lparam: int) -> int:
         try:
+            menu = self._menus.get(hwnd)
+            if menu is not None and menu.handle(msg, wparam, lparam):
+                return 0
             if hwnd == self._control:
                 if msg == _WM_UPDATE:
                     self._paint()
@@ -325,6 +307,9 @@ class Panel:
                     self._attach()
                     return 0
                 if msg == api.WM_CLOSE:
+                    for open_menu in list(self._menus.values()):
+                        if open_menu.parent is None:
+                            open_menu.close()
                     if self._hover is not None:
                         self._hover.destroy()
                     self._detach()

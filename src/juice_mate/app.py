@@ -134,6 +134,21 @@ def _first_instance() -> bool:
 
 
 SOURCE_NAMES = {"claude": "Claude usage", "bluetooth": "Bluetooth devices", "hator": "HATOR mouse"}
+# The right-click menu's glyphs: Segoe Fluent Icons, written with chr() (literal Private Use Area
+# characters have turned invisible in editors before).
+ICONS = {
+    "settings": chr(0xE713),
+    "show": chr(0xE890),
+    "sources": chr(0xE8F1),
+    "refresh": chr(0xE72C),
+    "claude": "✳",
+    "keep": chr(0xE895),
+    "startup": chr(0xE823),
+    "quit": chr(0xE7E8),
+    "update": chr(0xE896),
+    "bluetooth": chr(0xE702),
+    "hator": chr(0xE962),
+}
 
 
 def panel_items(
@@ -186,7 +201,8 @@ def local_clock(t: float) -> str:
 
 
 def run() -> None:
-    from juice_mate.panel.window import MenuEntry, Panel
+    from juice_mate.panel.menu import MenuEntry
+    from juice_mate.panel.window import Panel
     from juice_mate.tray.toasts import Toasts
     from juice_mate.ui.settings_app import Entry, write_items
     from juice_mate.update import autostart
@@ -255,36 +271,56 @@ def run() -> None:
 
     def menu() -> list[MenuEntry | None]:
         ready = updater.ready
-        update = [MenuEntry(f"Restart to update to {ready}", updater.restart_now), None] if ready else []
+        update: list[MenuEntry | None] = (
+            [
+                MenuEntry(f"Restart to update to {ready}", updater.restart_now, icon=ICONS["update"], style="accent"),
+                None,
+            ]
+            if ready
+            else []
+        )
         shown: list[MenuEntry | None] = [
-            MenuEntry(s.name, lambda s=s: toggle_sensor(s.sensor), checked=s.sensor in settings.sensors)  # type: ignore[misc]
+            MenuEntry(
+                s.name,
+                lambda s=s: toggle_sensor(s.sensor),  # type: ignore[misc]
+                checked=s.sensor in settings.sensors,
+                icon=metric_item(Metric(s.sensor, s.name, None, Unit.PERCENT), datetime.now()).glyph,
+            )
             for s in catalog
         ]
         on: list[MenuEntry | None] = [
-            MenuEntry(SOURCE_NAMES[name], lambda name=name: toggle_source(name), checked=settings.source_on(name))  # type: ignore[misc]
+            MenuEntry(
+                SOURCE_NAMES[name],
+                lambda name=name: toggle_source(name),  # type: ignore[misc]
+                checked=settings.source_on(name),
+                icon=ICONS[name],
+            )
             for name in named
         ]
         claude = settings.source_on("claude")
         return [
             *update,
-            MenuEntry("Settings…", open_settings),
+            MenuEntry("Settings…", open_settings, icon=ICONS["settings"]),
             None,
-            MenuEntry("Show", children=shown),
-            MenuEntry("Sources", children=on),
-            MenuEntry("Refresh now", refresh_now),
-            *([MenuEntry("Ask Claude now", ask_now)] if claude and find_claude() else []),
+            MenuEntry("Show", children=shown, icon=ICONS["show"]),
+            MenuEntry("Sources", children=on, icon=ICONS["sources"]),
+            MenuEntry("Refresh now", refresh_now, icon=ICONS["refresh"]),
+            *([MenuEntry("Ask Claude now", ask_now, icon=ICONS["claude"])] if claude and find_claude() else []),
             *(
                 [
                     MenuEntry(
-                        "Keep Claude's 5-hour window running", toggle_keep_window, checked=settings.keep_claude_window
+                        "Keep the 5-hour window",
+                        toggle_keep_window,
+                        checked=settings.keep_claude_window,
+                        icon=ICONS["keep"],
                     )
                 ]
                 if claude
                 else []
             ),
-            MenuEntry("Start with Windows", toggle_autostart, checked=autostart.is_enabled()),
+            MenuEntry("Start with Windows", toggle_autostart, checked=autostart.is_enabled(), icon=ICONS["startup"]),
             None,
-            MenuEntry("Quit Juice-Mate", quit_app),
+            MenuEntry("Quit Juice-Mate", quit_app, icon=ICONS["quit"], style="danger"),
         ]
 
     # What the hover card needs: two histories and the latest of everything, by item key.

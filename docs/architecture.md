@@ -182,7 +182,7 @@ How, chosen for robustness:
 - **Fails quietly.** Cannot attach → a single tray icon appears *only then*, so the menu (Quit,
   autostart) stays reachable and its tooltip says "Taskbar panel unavailable".
 - Main monitor first; `Shell_SecondaryTrayWnd` (other monitors) later.
-- Right-click on the panel → the menu: Refresh, Start with Windows, Restart to update, Quit.
+- Right-click on the panel → the menu (§6c): Settings, Show, Sources, Refresh, Ask Claude, the 5-hour window, Start with Windows, Restart to update, Quit.
 
 Risk: Windows 11 feature updates have reshaped the taskbar before. The panel step starts with a
 spike that measures attach, Explorer restart, auto-hide and full screen on the real PC.
@@ -297,3 +297,13 @@ A layered top-most window that never takes focus or clicks; no WebView — insta
 - History (`core/history.py`): batteries and usage windows one sample per 2 min for two days, saved
   to `%APPDATA%\JuiceMate\history.json` every 10 min and at quit; sensors every tick for an hour, in
   memory. One sample per step-long bucket, the newest value in it.
+
+## 6c. The right-click menu — Juice-Mate's own (owner, 2026-10-22)
+
+Windows' popup menu cannot be restyled, so `panel/menu.py` draws one like the hover card: a layered
+window, the same palette, redrawn on every hover change; not modal, so the panel keeps updating.
+A header label, Fluent glyphs per line, a cyan bar on the line under the mouse (magenta for Quit,
+cyan text for "Restart to update"). Switches instead of check marks: clicking one slides it and
+keeps the menu open. Submenus (Show, Sources) slide out beside it after a short rest; the root keeps
+the keyboard focus (submenus never activate), so a click anywhere else closes everything. Esc,
+arrows and Enter work. Opens above the cursor, kept between the taskbar's ends.
