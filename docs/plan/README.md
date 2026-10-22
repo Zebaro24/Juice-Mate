@@ -26,7 +26,7 @@ Ordered by dependency. ✅ done · ⚠️ written, not verified on the real targ
 | 13 | Settings window (WebView2, Juice-Mate's own dark look): everything of step 10 without editing JSON, icon picker for devices, own title bar with minimize / close / quit everything | ✅ · ⚠️ not yet in an installed build |
 | 14 | Hover card instead of the tooltip: story and chart per item (battery drain and charges, usage pace, sensor hour), history kept on disk | ✅ · ⚠️ not yet seen by the owner on a real hover |
 | 15 | News: buttons that open the articles, topics, recent news in the menu | ✅ · ⚠️ the notification's buttons not yet clicked by the owner |
-| 16 | Second monitor: strips on `Shell_SecondaryTrayWnd`, each item placed main / second, left / right | |
+| 16 | Second monitor: strips on `Shell_SecondaryTrayWnd`, each item placed main / second, left / right | ✅ · ⚠️ no second monitor seen yet; the clock's room is an estimate |
 
 Later (not v0.1): popover window with all readings and reset timers; laptop battery; Android phone
 via ADB; per-day traffic history. Source ideas: the Bento note "Tray app —

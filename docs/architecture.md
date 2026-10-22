@@ -76,7 +76,8 @@ A failing source returns an error reading, never raises into the poll loop.
   (`[7] [The Verge] …`) and each answer line ends with its number (`… #7`); `core/news.py` ties the
   lines back to their articles. The notification gets a "Read · source" button per story and opens
   the first article when clicked; the menu's **Recent news** lists the last five
-  (`news.json` in the data folder, thirty kept). Only `https` links to the three feeds' own sites
+  (`news.json` in the data folder, thirty kept). Every link passes `news.safe_url` — when read from
+  the feed, shown in the toast and opened — and is opened in its rebuilt canonical form; only `https` links to the three feeds' own sites
   are ever opened (`app.open_article`): the answer of a language model must not choose what opens.
 - **Topics** (`news_topics`, the settings window's chips): AI, devices, games, software, science,
   business; a partial pick adds "Prefer stories about: …" to the prompt. Saved prompts equal to an
@@ -190,7 +191,12 @@ How, chosen for robustness:
 - **Its own thread** with its own Win32 message loop; the poll loop hands it readings.
 - **Fails quietly.** Cannot attach → a single tray icon appears *only then*, so the menu (Quit,
   autostart) stays reachable and its tooltip says "Taskbar panel unavailable".
-- Main monitor first; `Shell_SecondaryTrayWnd` (other monitors) later.
+- **Second monitor** (owner, 2026-10-22): when a `Shell_SecondaryTrayWnd` exists (the first one),
+  two more strips go on it — at its left end and by its clock — for the items placed
+  `second-left` / `second-right` (§6a). No notification area there, so the right strip keeps
+  `_SECOND_CLOCK` (110 px at 96 DPI) clear for the clock: an estimate, not yet measured on a real
+  second monitor. No second taskbar → those items join the main strips; the watchdog attaches and
+  detaches as monitors come and go.
 - Right-click on the panel → the menu (§6c): Settings, Show, Sources, Refresh, Ask Claude, the 5-hour window, Start with Windows, Restart to update, Quit.
 
 Risk: Windows 11 feature updates have reshaped the taskbar before. The panel step starts with a
