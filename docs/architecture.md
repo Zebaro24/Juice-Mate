@@ -103,7 +103,11 @@ A failing source returns an error reading, never raises into the poll loop.
 - Build: `poetry run python scripts/build.py` → `dist/JuiceMate/` (~42 MB, ~62 MB RAM running).
   CI: `.github/workflows/ci.yml` runs the strict gate on every push to main;
   `.github/workflows/release.yml` on a `vX.Y.Z` tag checks the tag against `VERSION`, builds,
-  `vpk download` (deltas) → `vpk pack` → `vpk upload github --publish`.
+  `vpk download` (deltas) → `vpk pack` → `vpk upload github --publish`. The release's description
+  and the package's notes are that version's CHANGELOG section only (`scripts/release_notes.py`).
+  Both workflows cache `.venv` keyed on `poetry.lock`, and pip for Poetry itself.
+- Update conditions (seen 2026-10-22, 0.3.0 → 0.3.1): a check at every start and every 6 h; the delta
+  downloads in the background (~3 s); applied at the next start, or at once from "Restart to update".
 - A frozen build run from `dist/` (not installed) logs once and skips self-update.
 
 ### 4.1 Where updates are downloaded from — LOCKED (owner, 2026-10-20)

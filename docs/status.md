@@ -131,3 +131,10 @@ Setup refused at first ("already installed"): the app's settings and log lived i
 attached from `current\JuiceMate.exe`, the update check ran and found nothing newer. Autostart did
 not switch on — the first-run hook took no argument and failed silently; set by hand. Fixed in code:
 data in `%APPDATA%\JuiceMate` (carried over once), autostart through the install / uninstall hooks.
+
+## Self-update seen: 0.3.0 → 0.3.1 (2026-10-22)
+
+The installed 0.3.0, restarted, found v0.3.1 on GitHub, downloaded the delta and rebuilt the full
+package in ~3 s ("applies on the next start"). Quit and started again without touching the menu:
+`current\sq.version` said 0.3.1, the settings had moved to `%APPDATA%\JuiceMate`, the panel attached,
+autostart in place. ⚠️ "Restart to update" from the menu not clicked yet.

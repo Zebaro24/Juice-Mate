@@ -16,8 +16,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        id: python
         with:
           python-version: "3.13"
+          cache: pip  # Poetry itself
+          cache-dependency-path: poetry.lock
+      # The same environment cache as ci.yml: a tag right after a push reuses what CI just built.
+      - uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py${{ steps.python.outputs.python-version }}-${{ hashFiles('poetry.lock') }}
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
@@ -43,11 +51,18 @@ jobs:
       - name: Fetch the previous release (for delta updates)
         continue-on-error: true  # the first release has nothing to fetch
         run: vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }}
+      - name: Release notes — this version's CHANGELOG section only
+        run: python scripts/release_notes.py ${{ env.VERSION }} > build/notes.md
       - name: Pack
         run: >
           vpk pack --packId JuiceMate --packVersion ${{ env.VERSION }} --packDir dist/JuiceMate
           --mainExe JuiceMate.exe --packTitle Juice-Mate --packAuthors Zebaro --icon build/icon.ico
+          --releaseNotes build/notes.md
       - name: Publish
         run: >
           vpk upload github --repoUrl https://github.com/${{ github.repository }} --publish
           --releaseName "Juice-Mate ${{ env.VERSION }}" --tag ${{ github.ref_name }} --token ${{ secrets.GITHUB_TOKEN }}
+      - name: Release description
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit ${{ github.ref_name }} --notes-file build/notes.md

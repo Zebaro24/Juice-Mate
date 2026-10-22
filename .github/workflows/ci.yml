@@ -11,8 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
+        id: python
         with:
           python-version: "3.13"
+          cache: pip  # Poetry itself
+          cache-dependency-path: poetry.lock
+      # The whole environment, keyed on the lock file: unchanged dependencies install in seconds.
+      - uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-py${{ steps.python.outputs.python-version }}-${{ hashFiles('poetry.lock') }}
       - name: Install Poetry and dependencies
         run: |
           python -m pip install --upgrade pip poetry
