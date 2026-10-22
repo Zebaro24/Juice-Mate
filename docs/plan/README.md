@@ -19,7 +19,7 @@ Ordered by dependency. ✅ done · ⚠️ written, not verified on the real targ
 | 06 | Thresholds and toasts (§6), autostart toggle | ✅ · ⚠️ a real low-battery toast not seen yet (rule covered by tests, toast shown once by hand) |
 | 07 | Packaging and self-update (§4): PyInstaller `--windowed` + Velopack, CI release on tag, GitHub source | ✅ · ⚠️ install and a real update from v0.1.0 → v0.1.1 not yet seen |
 | 08 | System sensors on the panel with a Show menu; usage pace forecast and alerts; click-to-open; then the owner uninstalls TrafficMonitor | ✅ · ⚠️ TrafficMonitor still installed (owner's call) |
-| 09 | Install on both PCs, uninstall Hator Hub and Frida | |
+| 09 | Install on both PCs, uninstall Hator Hub and Frida | ✅ owner's PC: v0.3.0 installed, self-updated to 0.3.1; Hator Hub removed (owner), Frida (pip `frida`, `frida-tools`) removed · ⚠️ second PC not yet |
 
 Later (not v0.1): popover window with all readings and reset timers; laptop battery; Android phone
 via ADB; per-day traffic history. Source ideas: the Bento note "Tray app —
