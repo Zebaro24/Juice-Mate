@@ -201,7 +201,7 @@ Wi-Fi glyph (16 px), at 96 DPI, scaled with the taskbar's DPI (re-measured 2026-
 | Element | Value | Why |
 | ------- | ----- | --- |
 | Rows | centres at 14/48 and 32/48 of the height | 2 px further apart than the clock's: 16 px glyphs stuck together (owner) |
-| Numbers | Segoe UI Variable 13 px, weight 450, whole pixels, contrast curve on alpha | digits 9 px tall, the clock's own; 12 px read "tiny" (owner) |
+| Numbers | Segoe UI Variable 14 px, weight 450, whole pixels, contrast curve on alpha | digits 10 px; 13 px (the clock's 9 px) still read smaller than the clock, 12 px "tiny" (owner) |
 | Glyphs | 16 px, drawn at 4×, strokes grown by a 3×3 max filter (5×5 for ✳), scaled down | the Wi-Fi glyph's size; owner asked for thicker lines, and a bolder ✳ |
 | Tags `5h` / `7d` | the number's size (owner), ~75 % alpha | a smaller tag was unreadable on a red taskbar |
 | Number slot | right-aligned, at least as wide as `00%` | 9 → 10 % and 88 → 89 % move nothing; % signs line up |

@@ -19,10 +19,11 @@ _SYMBOL_FONTS = ("seguisym.ttf",)  # glyphs outside the icon fonts, e.g. Claude'
 _PRIVATE_USE = range(0xE000, 0xF900)  # where the icon fonts keep their glyphs
 
 # At 96 DPI, for two rows in a 48 px taskbar. Measured on the owner's screen, 2026-10-22: the clock's
-# digits are 9 px tall, its rows centred at y 15 and 31. 13 px Segoe UI Variable gives the same 9 px
-# digits (12 px gives 8: "tiny", owner); the rows sit 2 px further apart than the clock's (owner).
+# digits are 9 px tall, its rows centred at y 15 and 31. Measured-equal 13 px (9 px digits) still read
+# smaller than the clock to the owner, 12 px "tiny": 14 px, 10 px digits. The rows sit 2 px further
+# apart than the clock's (owner).
 GLYPH_PX = 16
-TEXT_PX = 13
+TEXT_PX = 14
 TEXT_WEIGHT = 450  # a half step above the clock's Regular: with the curve below, the clock's own ink
 BOLT_PX = 10
 ROWS = (14 / 48, 32 / 48)  # row centres as a share of the taskbar height
