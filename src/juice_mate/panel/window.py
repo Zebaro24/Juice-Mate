@@ -22,8 +22,11 @@ from dataclasses import dataclass, field
 
 from PIL import Image
 
+from juice_mate.core.card import Card
 from juice_mate.core.display import Item
 from juice_mate.panel import win32 as api
+from juice_mate.panel.hover import Hover
+from juice_mate.panel.layered import blit
 from juice_mate.panel.render import Span, Theme, premultiplied_bgra, render
 from juice_mate.panel.uia import LeftEdge, centred_taskbar
 
@@ -48,12 +51,11 @@ class MenuEntry:
 
 @dataclass
 class _Strip:
-    """One layered child window of the taskbar, with its own hover areas and tooltip."""
+    """One layered child window of the taskbar, with its own hover areas."""
 
     hwnd: int | None = None
-    tooltip: int | None = None
-    tools: int = 0
     spans: list[Span] = field(default_factory=list)
+    tracking: bool = False  # asked Windows for WM_MOUSELEAVE
 
 
 @dataclass(frozen=True)
@@ -78,16 +80,22 @@ def _light_theme() -> bool:
 
 class Panel:
     def __init__(
-        self, menu: Callable[[], list[MenuEntry | None]], on_click: Callable[[str], None] = lambda _key: None
+        self,
+        menu: Callable[[], list[MenuEntry | None]],
+        on_click: Callable[[str], None] = lambda _key: None,
+        card_for: Callable[[str], Card | None] = lambda _key: None,
     ) -> None:
         """`menu` is asked for the entries each time the menu opens, so a checkmark is always current.
-        `on_click` gets the key of the item under a left click.
+        `on_click` gets the key of the item under a left click; `card_for` the key under the mouse,
+        for the hover card (hover.py).
 
-        Both run on the panel thread: they must return at once (set an event, flip a setting, start a
-        thread).
+        All three run on the panel thread: they must return at once (set an event, flip a setting,
+        start a thread, build a card from what is already in memory).
         """
         self._menu_entries = menu
         self._on_click = on_click
+        self._card_for = card_for
+        self._hover: Hover | None = None
         self._lock = threading.Lock()
         self._right_items: list[Item] = []
         self._left_items: list[Item] = []
@@ -141,6 +149,7 @@ class Panel:
         )
         ctypes.WinDLL("comctl32").InitCommonControls()
         api.user32.SetTimer(self._control, _WATCHDOG_TIMER, _WATCHDOG_MS, None)
+        self._hover = Hover(self._control, _CLASS, self._card_for)
         self._started.set()
         self._widgets.start()
         self._attach()
@@ -162,8 +171,6 @@ class Panel:
             if not strip.hwnd:
                 self._detach()
                 return
-            strip.tooltip = self._make_tooltip(strip.tooltip)
-            strip.tools = 0
         self._anchor = None
         self._paint()
         self._attached.set()
@@ -188,46 +195,6 @@ class Panel:
             if strip.hwnd and api.user32.IsWindow(strip.hwnd):
                 api.user32.DestroyWindow(strip.hwnd)
             strip.hwnd = None
-
-    def _make_tooltip(self, old: int | None) -> int | None:
-        if old:
-            api.user32.DestroyWindow(old)
-        tooltip: int | None = api.user32.CreateWindowExW(
-            api.WS_EX_TOPMOST,
-            api.TOOLTIPS_CLASS,
-            None,
-            api.WS_POPUP | api.TTS_NOPREFIX | api.TTS_ALWAYSTIP,
-            api.CW_USEDEFAULT,
-            api.CW_USEDEFAULT,
-            api.CW_USEDEFAULT,
-            api.CW_USEDEFAULT,
-            self._control,
-            None,
-            api.kernel32.GetModuleHandleW(None),
-            None,
-        )
-        return tooltip
-
-    def _set_tools(self, strip: _Strip, spans: list[Span]) -> None:
-        if not strip.tooltip or not strip.hwnd:
-            return
-        info = api.TOOLINFOW()
-        info.cbSize = ctypes.sizeof(api.TOOLINFOW)
-        info.hwnd = strip.hwnd
-        for i in range(strip.tools):
-            info.uId = i
-            api.user32.SendMessageW(strip.tooltip, api.TTM_DELTOOLW, 0, ctypes.addressof(info))
-        texts = []
-        for i, span in enumerate(spans):
-            info.uFlags = api.TTF_SUBCLASS
-            info.uId = i
-            info.rect = w.RECT(span.left, span.top, span.right, span.bottom)
-            text = ctypes.create_unicode_buffer(span.tooltip)
-            texts.append(text)  # the tooltip copies the text during the call
-            info.lpszText = ctypes.cast(text, w.LPWSTR)
-            api.user32.SendMessageW(strip.tooltip, api.TTM_ADDTOOLW, 0, ctypes.addressof(info))
-        strip.tools = len(spans)
-        strip.spans = spans
 
     def _geometry(self, taskbar: int) -> _Geometry:
         notify = api.user32.FindWindowExW(taskbar, None, "TrayNotifyWnd", None)
@@ -265,50 +232,15 @@ class Panel:
         start = g.widgets_right - g.taskbar[0] + margin if g.widgets_right is not None else margin
         self._place(self._left, start, width, height, image, spans)
         self._anchor = g
+        if self._hover is not None:
+            self._hover.refresh()
 
     def _place(self, strip: _Strip, x: int, width: int, height: int, image: Image.Image, spans: list[Span]) -> None:
         if not strip.hwnd:
             return
         api.user32.SetWindowPos(strip.hwnd, api.HWND_TOP, x, 0, width, height, api.SWP_NOACTIVATE | api.SWP_SHOWWINDOW)
-        self._blit(strip.hwnd, image.width, height, premultiplied_bgra(image))
-        self._set_tools(strip, spans)
-
-    def _blit(self, hwnd: int, width: int, height: int, pixels: bytes) -> None:
-        header = api.BITMAPINFOHEADER()
-        header.biSize = ctypes.sizeof(api.BITMAPINFOHEADER)
-        header.biWidth, header.biHeight = width, -height  # negative: top-down rows
-        header.biPlanes, header.biBitCount = 1, 32
-        bits = ctypes.c_void_p()
-        screen = api.user32.GetDC(None)
-        memory = api.gdi32.CreateCompatibleDC(screen)
-        bitmap = api.gdi32.CreateDIBSection(memory, ctypes.byref(header), 0, ctypes.byref(bits), None, 0)
-        try:
-            if not bitmap or not bits.value:
-                return
-            ctypes.memmove(bits.value, pixels, len(pixels))
-            old = api.gdi32.SelectObject(memory, bitmap)
-            size = w.SIZE(width, height)
-            origin = w.POINT(0, 0)
-            blend = api.BLENDFUNCTION(api.AC_SRC_OVER, 0, 255, api.AC_SRC_ALPHA)
-            ok = api.user32.UpdateLayeredWindow(
-                hwnd,
-                screen,
-                None,
-                ctypes.byref(size),
-                memory,
-                ctypes.byref(origin),
-                0,
-                ctypes.byref(blend),
-                api.ULW_ALPHA,
-            )
-            if not ok:
-                log.warning("UpdateLayeredWindow failed (error %s)", ctypes.get_last_error())
-            api.gdi32.SelectObject(memory, old)
-        finally:
-            if bitmap:
-                api.gdi32.DeleteObject(bitmap)
-            api.gdi32.DeleteDC(memory)
-            api.user32.ReleaseDC(None, screen)
+        blit(strip.hwnd, image.width, height, premultiplied_bgra(image))
+        strip.spans = spans
 
     def _watchdog(self) -> None:
         """Explorer restarted, the taskbar moved or resized, the theme flipped, the Widgets button came,
@@ -354,13 +286,28 @@ class Panel:
         if 1 <= command <= len(actions):
             actions[command - 1]()
 
-    def _click(self, strip: _Strip, lparam: int) -> None:
+    @staticmethod
+    def _span_at(strip: _Strip, lparam: int) -> Span | None:
         x = ctypes.c_short(lparam & 0xFFFF).value
         y = ctypes.c_short((lparam >> 16) & 0xFFFF).value
-        for span in strip.spans:
-            if span.left <= x < span.right and span.top <= y < span.bottom:
-                self._on_click(span.key)
-                return
+        return next((s for s in strip.spans if s.left <= x < s.right and s.top <= y < s.bottom), None)
+
+    def _click(self, strip: _Strip, lparam: int) -> None:
+        span = self._span_at(strip, lparam)
+        if span is not None:
+            self._on_click(span.key)
+
+    def _mouse(self, strip: _Strip, lparam: int) -> None:
+        """Over a strip: ask for WM_MOUSELEAVE once, and tell the card which item is under the mouse."""
+        if not strip.tracking and strip.hwnd:
+            track = api.TRACKMOUSEEVENT(ctypes.sizeof(api.TRACKMOUSEEVENT), api.TME_LEAVE, strip.hwnd, 0)
+            strip.tracking = bool(api.user32.TrackMouseEvent(ctypes.byref(track)))
+        if self._hover is None or self._anchor is None or not strip.hwnd:
+            return
+        span = self._span_at(strip, lparam)
+        left = api.rect(strip.hwnd)[0]
+        centre = left + (span.left + span.right) // 2 if span else left
+        self._hover.point(span.key if span else None, centre, self._anchor.taskbar, self._anchor.scale)
 
     def _wndproc(self, hwnd: int, msg: int, wparam: int, lparam: int) -> int:
         try:
@@ -371,11 +318,15 @@ class Panel:
                 if msg == api.WM_TIMER and wparam == _WATCHDOG_TIMER:
                     self._watchdog()
                     return 0
+                if msg == api.WM_TIMER and self._hover is not None and self._hover.timer(wparam):
+                    return 0
                 if msg == self._taskbar_created:  # Explorer restarted: the old taskbar and our children are gone
                     self._detach()
                     self._attach()
                     return 0
                 if msg == api.WM_CLOSE:
+                    if self._hover is not None:
+                        self._hover.destroy()
                     self._detach()
                     api.user32.DestroyWindow(hwnd)
                     return 0
@@ -389,6 +340,14 @@ class Panel:
                     return 0
                 if msg == api.WM_LBUTTONUP:
                     self._click(strip, lparam)
+                    return 0
+                if msg == api.WM_MOUSEMOVE:
+                    self._mouse(strip, lparam)
+                    return 0
+                if msg == api.WM_MOUSELEAVE:
+                    strip.tracking = False
+                    if self._hover is not None:
+                        self._hover.leave()
                     return 0
                 if msg == api.WM_DESTROY:
                     strip.hwnd = None

@@ -68,6 +68,10 @@ class TOOLINFOW(ctypes.Structure):
     ]
 
 
+class TRACKMOUSEEVENT(ctypes.Structure):
+    _fields_ = [("cbSize", w.DWORD), ("dwFlags", w.DWORD), ("hwndTrack", w.HWND), ("dwHoverTime", w.DWORD)]
+
+
 def _sig(dll: ctypes.WinDLL, name: str, restype: object, *argtypes: object) -> None:
     fn = getattr(dll, name)
     fn.restype = restype
@@ -101,6 +105,9 @@ _sig(user32, "SendMessageW", LRESULT, w.HWND, w.UINT, w.WPARAM, w.LPARAM)
 _sig(user32, "PostQuitMessage", None, ctypes.c_int)
 _sig(user32, "RegisterWindowMessageW", w.UINT, w.LPCWSTR)
 _sig(user32, "SetTimer", ctypes.c_size_t, w.HWND, ctypes.c_size_t, w.UINT, w.LPVOID)
+_sig(user32, "KillTimer", w.BOOL, w.HWND, ctypes.c_size_t)
+_sig(user32, "ShowWindow", w.BOOL, w.HWND, ctypes.c_int)
+_sig(user32, "TrackMouseEvent", w.BOOL, ctypes.POINTER(TRACKMOUSEEVENT))
 _sig(user32, "CreatePopupMenu", w.HMENU)
 _sig(user32, "AppendMenuW", w.BOOL, w.HMENU, w.UINT, ctypes.c_size_t, w.LPCWSTR)
 _sig(user32, "TrackPopupMenu", w.BOOL, w.HMENU, w.UINT, ctypes.c_int, ctypes.c_int, ctypes.c_int, w.HWND, w.LPVOID)
@@ -127,6 +134,10 @@ WS_EX_LAYERED = 0x00080000
 WS_EX_TOOLWINDOW = 0x00000080
 WS_EX_NOACTIVATE = 0x08000000
 WS_EX_TOPMOST = 0x00000008
+WS_EX_TRANSPARENT = 0x00000020  # clicks pass through: the card never takes the mouse
+SW_HIDE = 0
+SW_SHOWNOACTIVATE = 4
+TME_LEAVE = 0x00000002
 SWP_NOACTIVATE = 0x0010
 SWP_SHOWWINDOW = 0x0040
 HWND_TOP = None

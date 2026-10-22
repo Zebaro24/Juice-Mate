@@ -6,6 +6,7 @@ goes to %APPDATA%\\JuiceMate\\juice-mate.log (folders.py).
 
 import argparse
 import ctypes
+import json
 import logging
 import os
 import subprocess
@@ -14,11 +15,15 @@ import threading
 import time
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 from juice_mate import folders, quit
 from juice_mate.core.alerts import NEWS, Alert, Alerts
 from juice_mate.core.arrange import LEFT, RIGHT, SECOND_LEFT, SECOND_RIGHT, arrange, personalise
+from juice_mate.core.card import Card
+from juice_mate.core.card import card_for as build_card
 from juice_mate.core.display import Item, items, metric_item
+from juice_mate.core.history import History
 from juice_mate.core.metric import Metric, Unit, short
 from juice_mate.core.reading import Kind, Reading, level
 from juice_mate.settings import Settings
@@ -147,6 +152,39 @@ def panel_items(
     return arrange(shown, settings.order, settings.placement)
 
 
+HISTORY_KEEP = 2 * 24 * 3600  # two days of batteries and usage windows
+HISTORY_STEP = 120  # one sample per two minutes
+HISTORY_SAVE_EVERY = 600
+
+
+def _history_path() -> Path:
+    return folders.data() / "history.json"
+
+
+def load_history(history: History) -> None:
+    try:
+        history.load(json.loads(_history_path().read_text(encoding="utf-8")), time.time())
+    except FileNotFoundError:
+        pass
+    except (OSError, ValueError):
+        log.exception("history unreadable, starting afresh")
+
+
+def save_history(history: History) -> None:
+    path = _history_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(history.dump()), encoding="utf-8")
+        temporary.replace(path)
+    except OSError:
+        log.exception("could not save the history")
+
+
+def local_clock(t: float) -> str:
+    return datetime.fromtimestamp(t).strftime("%H:%M")
+
+
 def run() -> None:
     from juice_mate.panel.window import MenuEntry, Panel
     from juice_mate.tray.toasts import Toasts
@@ -249,7 +287,23 @@ def run() -> None:
             MenuEntry("Quit Juice-Mate", quit_app),
         ]
 
-    panel = Panel(menu, on_click=open_target)
+    # What the hover card needs: two histories and the latest of everything, by item key.
+    batteries = History(keep=HISTORY_KEEP, step=HISTORY_STEP)  # batteries and usage windows, on disk
+    sensed = History(keep=3600, step=TICK_SECONDS)  # sensors, the last hour, memory only
+    load_history(batteries)
+    # Replaced whole each tick, never cleared in place: the panel thread reads it at any moment.
+    latest: list[dict[str, tuple[Item, Reading | None, Metric | None]]] = [{}]
+
+    def card_for(key: str) -> Card | None:
+        """On the panel thread: only what is already in memory."""
+        found = latest[0].get(key)
+        if found is None:
+            return None
+        shown, reading, metric = found
+        samples = (sensed if metric is not None else batteries).series(key)
+        return build_card(shown, reading, metric, samples, time.time(), local_clock)
+
+    panel = Panel(menu, on_click=open_target, card_for=card_for)
     if not panel.start():
         log.warning("the taskbar panel could not attach; falling back to tray icons")
         from juice_mate.tray.icons import TrayIcons
@@ -260,6 +314,7 @@ def run() -> None:
     quit.listen(quit_app)  # the settings window's power button
     updater.start()
     alerts, toasts = Alerts(), Toasts()
+    history_saved = time.time()
     readings: list[Reading] = []
     batteries_due = 0.0
     while not stop.is_set():
@@ -268,6 +323,13 @@ def run() -> None:
             refresh.clear()
             readings = poll_all([source for name, source in named.items() if settings.source_on(name)])
             remember(readings)
+            stamp = time.time()
+            for r in readings:
+                if r.connected and r.percent is not None and r.error is None:
+                    batteries.add(f"{r.source}:{r.device_id}", stamp, float(r.percent), bool(r.charging))
+            if stamp - history_saved >= HISTORY_SAVE_EVERY:
+                save_history(batteries)
+                history_saved = stamp
             batteries_due = now + BATTERY_SECONDS
             # As the panel shows them: a hidden device stays quiet, a renamed one alerts by its new name.
             for alert in alerts.check(personalise(readings, settings.device_prefs()), settings.battery_alert):
@@ -281,10 +343,20 @@ def run() -> None:
             continue
         moment = datetime.now()
         metrics = [s.read() for s in catalog if s.sensor in settings.sensors]
+        stamp = time.time()
+        for m in metrics:
+            if m.value is not None:
+                sensed.add(f"system:{m.sensor}", stamp, m.value)
         places = panel_items(readings, metrics, settings, moment)
+        by_key = {f"{r.source}:{r.device_id}": r for r in personalise(readings, settings.device_prefs())}
+        by_sensor = {f"system:{m.sensor}": m for m in metrics}
+        latest[0] = {
+            it.key: (it, by_key.get(it.key), by_sensor.get(it.key)) for items_ in places.values() for it in items_
+        }
         panel.show(places[RIGHT] + places[SECOND_RIGHT], places[LEFT] + places[SECOND_LEFT])
         wake.wait(TICK_SECONDS)
         wake.clear()
+    save_history(batteries)
     updater.stop()
     panel.stop()
     log.info("quit")

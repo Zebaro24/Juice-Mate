@@ -279,3 +279,21 @@ rounded corners and the logo as the icon (`logo.py` → `%APPDATA%\JuiceMate\ico
 - **Notifications** by kind (`alerts`): `battery`, `usage_pace`, `usage_back`, `news`.
 - A broken field falls back to its own default and is logged; switch maps (`sources`, `alerts`) keep
   defaults for keys the file does not name, so a source added in an update starts on.
+
+## 6b. Hover card — the tooltip's replacement (owner, 2026-10-22)
+
+The plain tooltip blinked out every time the panel repainted. Now resting the mouse on an item for
+~0.3 s opens a card above it, in the settings window's look (`panel/card.py` draws it with Pillow,
+`panel/hover.py` runs it on the panel thread): glyph, name, the number, a few lines of story, and a
+chart. It rises a few pixels while it fades in, swaps its content in place when the mouse moves to
+the next item, is redrawn in place with every update (nothing blinks), and fades out on leave.
+A layered top-most window that never takes focus or clicks; no WebView — instant and light.
+
+- **Batteries**: draining N% an hour, lasts about X more, last charged at HH:MM; charging → full in
+  about X. Chart: the last 12 h, the charging stretches shaded (`core/insight.py`: a least-squares
+  rate over the samples since the last charge, at least 20 minutes of them).
+- **Usage windows**: resets in X at HH:MM, and when the limit comes at this pace. Chart: 5 h.
+- **Sensors**: low / average / high of the last hour, GB of total for memory. Chart: the hour.
+- History (`core/history.py`): batteries and usage windows one sample per 2 min for two days, saved
+  to `%APPDATA%\JuiceMate\history.json` every 10 min and at quit; sensors every tick for an hour, in
+  memory. One sample per step-long bucket, the newest value in it.
