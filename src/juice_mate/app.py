@@ -15,10 +15,12 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 
 from juice_mate import folders
-from juice_mate.core.alerts import Alert, Alerts
-from juice_mate.core.display import items, metric_item
-from juice_mate.core.metric import Unit, short
+from juice_mate.core.alerts import NEWS, Alert, Alerts
+from juice_mate.core.arrange import LEFT, RIGHT, SECOND_LEFT, SECOND_RIGHT, arrange, personalise
+from juice_mate.core.display import Item, items, metric_item
+from juice_mate.core.metric import Metric, Unit, short
 from juice_mate.core.reading import Reading, level
+from juice_mate.settings import Settings
 from juice_mate.sources import Sensor, Source, poll_all
 from juice_mate.sources.bluetooth import Bluetooth
 from juice_mate.sources.claude import Claude
@@ -118,9 +120,20 @@ def _first_instance() -> bool:
     return ctypes.get_last_error() != _ERROR_ALREADY_EXISTS
 
 
+SOURCE_NAMES = {"claude": "Claude usage", "bluetooth": "Bluetooth devices", "hator": "HATOR mouse"}
+
+
+def panel_items(
+    readings: list[Reading], metrics: list[Metric], settings: Settings, now: datetime
+) -> dict[str, list[Item]]:
+    """Readings and sensor values → items per place, with the owner's names, icons, thresholds, order."""
+    shown = items(personalise(readings, settings.device_prefs()), now, settings.battery_low, settings.usage_high)
+    shown += [metric_item(m, now, settings.busy_percent, settings.hot_celsius) for m in metrics]
+    return arrange(shown, settings.order, settings.placement)
+
+
 def run() -> None:
     from juice_mate.panel.window import MenuEntry, Panel
-    from juice_mate.settings import Settings
     from juice_mate.tray.toasts import Toasts
     from juice_mate.update import autostart
     from juice_mate.update.updater import Updater
@@ -130,11 +143,13 @@ def run() -> None:
     settings = Settings.load()
     catalog = sensors()
     claude_run = ClaudeRun(lambda: settings.claude_prompt)
-    sources: list[Source] = [
-        Claude(run=claude_run, keep_window=lambda: settings.keep_claude_window),
-        Bluetooth(),
-        Hator(),
-    ]
+    # By the names of settings.SOURCES: a source switched off is not polled at all.
+    named: dict[str, Source] = {
+        "claude": Claude(run=claude_run, keep_window=lambda: settings.keep_claude_window),
+        "bluetooth": Bluetooth(),
+        "hator": Hator(),
+    }
+    sources = list(named.values())
 
     def quit_app() -> None:
         stop.set()
@@ -155,6 +170,11 @@ def run() -> None:
         settings.save()
         wake.set()
 
+    def toggle_source(source: str) -> None:
+        settings.toggle_source(source)
+        settings.save()
+        refresh_now()
+
     def toggle_keep_window() -> None:
         settings.keep_claude_window = not settings.keep_claude_window
         settings.save()
@@ -169,12 +189,26 @@ def run() -> None:
             MenuEntry(s.name, lambda s=s: toggle_sensor(s.sensor), checked=s.sensor in settings.sensors)  # type: ignore[misc]
             for s in catalog
         ]
+        on: list[MenuEntry | None] = [
+            MenuEntry(SOURCE_NAMES[name], lambda name=name: toggle_source(name), checked=settings.source_on(name))  # type: ignore[misc]
+            for name in named
+        ]
+        claude = settings.source_on("claude")
         return [
             *update,
             MenuEntry("Show", children=shown),
+            MenuEntry("Sources", children=on),
             MenuEntry("Refresh now", refresh_now),
-            *([MenuEntry("Ask Claude now", ask_now)] if find_claude() else []),
-            MenuEntry("Keep Claude's 5-hour window running", toggle_keep_window, checked=settings.keep_claude_window),
+            *([MenuEntry("Ask Claude now", ask_now)] if claude and find_claude() else []),
+            *(
+                [
+                    MenuEntry(
+                        "Keep Claude's 5-hour window running", toggle_keep_window, checked=settings.keep_claude_window
+                    )
+                ]
+                if claude
+                else []
+            ),
             MenuEntry("Start with Windows", toggle_autostart, checked=autostart.is_enabled()),
             None,
             MenuEntry("Quit Juice-Mate", quit_app),
@@ -196,16 +230,18 @@ def run() -> None:
         now = time.monotonic()
         if now >= batteries_due or refresh.is_set():
             refresh.clear()
-            readings = poll_all(sources)
+            readings = poll_all([source for name, source in named.items() if settings.source_on(name)])
             batteries_due = now + BATTERY_SECONDS
-            for alert in alerts.check(readings):
-                toasts.show(alert)
+            for alert in alerts.check(readings, settings.battery_alert):
+                if settings.alert_on(alert.kind):
+                    toasts.show(alert)
         reply = claude_run.take_reply()
-        if reply:
-            toasts.show(Alert("claude:run", "Claude", reply))
+        if reply and settings.alert_on(NEWS):
+            toasts.show(Alert("claude:run", "Claude", reply, NEWS))
         moment = datetime.now()
-        shown = [metric_item(s.read(), moment) for s in catalog if s.sensor in settings.sensors]
-        panel.show(items(readings, moment), shown)
+        metrics = [s.read() for s in catalog if s.sensor in settings.sensors]
+        places = panel_items(readings, metrics, settings, moment)
+        panel.show(places[RIGHT] + places[SECOND_RIGHT], places[LEFT] + places[SECOND_LEFT])
         wake.wait(TICK_SECONDS)
         wake.clear()
     updater.stop()

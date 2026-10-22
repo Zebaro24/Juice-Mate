@@ -45,14 +45,15 @@ class Reading:
     limit_at: datetime | None = None  # usage only: when the window runs out at the current pace
 
 
-def level(reading: Reading, low: int = LOW_PERCENT) -> Level:
-    """Disconnected wins over everything: Windows keeps returning a stale battery value then."""
+def level(reading: Reading, low: int = LOW_PERCENT, high: int = HIGH_USAGE_PERCENT) -> Level:
+    """Disconnected wins over everything: Windows keeps returning a stale battery value then.
+    `low` is the battery threshold, `high` the usage one (both the owner's, settings.py)."""
     if not reading.connected:
         return Level.OFFLINE
     if reading.error is not None or reading.percent is None:
         return Level.UNKNOWN
     if reading.kind is Kind.CLAUDE:
-        return Level.LOW if reading.percent >= HIGH_USAGE_PERCENT else Level.OK
+        return Level.LOW if reading.percent >= high else Level.OK
     if reading.charging:
         return Level.CHARGING
     return Level.LOW if reading.percent < low else Level.OK

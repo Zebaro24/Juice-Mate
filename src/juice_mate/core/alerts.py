@@ -19,11 +19,17 @@ FRESH_PERCENT = 20
 NEW_WINDOW_DROP = 5  # usage only goes down when a window resets; a smaller dip is rounding
 
 
+# Alert kinds — each one the owner can switch off on its own (settings.py `alerts`).
+BATTERY, USAGE_PACE, USAGE_BACK, NEWS = "battery", "usage_pace", "usage_back", "news"
+KINDS = (BATTERY, USAGE_PACE, USAGE_BACK, NEWS)
+
+
 @dataclass(frozen=True)
 class Alert:
     key: str
     title: str
     body: str
+    kind: str = BATTERY
 
 
 class Alerts:
@@ -31,7 +37,8 @@ class Alerts:
         self._raised: set[str] = set()
         self._usage: dict[str, int] = {}  # last % used per usage window
 
-    def check(self, readings: list[Reading]) -> list[Alert]:
+    def check(self, readings: list[Reading], battery_at: int = ALERT_PERCENT) -> list[Alert]:
+        """`battery_at`: a battery below it raises the alert (the owner's threshold)."""
         alerts = []
         for r in readings:
             if r.percent is None or not r.connected or r.error:
@@ -39,9 +46,9 @@ class Alerts:
             key = f"{r.source}:{r.device_id}"
             if r.kind is Kind.CLAUDE:
                 alerts.extend(self._usage_alerts(key, r, r.percent))
-            elif r.charging or r.percent >= REARM_PERCENT:
+            elif r.charging or r.percent >= max(REARM_PERCENT, battery_at + 5):
                 self._raised.discard(key)
-            elif r.percent < ALERT_PERCENT and key not in self._raised:
+            elif r.percent < battery_at and key not in self._raised:
                 self._raised.add(key)
                 alerts.append(Alert(key, f"{r.name} — {r.percent}%", "Time to charge it."))
         return alerts
@@ -54,11 +61,15 @@ class Alerts:
         if before is not None and used < before - NEW_WINDOW_DROP:
             self._raised.discard(pace_key)  # the window reset: a new one may warn once again
             if before >= SPENT_PERCENT and used < FRESH_PERCENT:
-                alerts.append(Alert(key, f"{r.name} limit is back", f"Now {used}% used — go for the heavy task."))
+                alerts.append(
+                    Alert(key, f"{r.name} limit is back", f"Now {used}% used — go for the heavy task.", USAGE_BACK)
+                )
         if r.limit_at is not None and pace_key not in self._raised:
             self._raised.add(pace_key)
             # limit_at arrives in local time from the source: core/ stays free of the machine's time zone.
             alerts.append(
-                Alert(pace_key, f"{r.name}: limit at {r.limit_at:%H:%M} at this pace", f"{used}% used so far.")
+                Alert(
+                    pace_key, f"{r.name}: limit at {r.limit_at:%H:%M} at this pace", f"{used}% used so far.", USAGE_PACE
+                )
             )
         return alerts

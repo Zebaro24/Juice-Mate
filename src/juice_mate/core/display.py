@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from juice_mate.core.metric import Metric, Unit, short
-from juice_mate.core.reading import Kind, Level, Reading, level
+from juice_mate.core.reading import HIGH_USAGE_PERCENT, LOW_PERCENT, Kind, Level, Reading, level
 
 GLYPHS: dict[Kind, str] = {
     Kind.KEYBOARD: "\ue765",  # KeyboardClassic
@@ -60,8 +60,8 @@ def tooltip(reading: Reading, now: datetime) -> str:
     return f"{reading.name} — {state} · {now:%H:%M}"[:127]
 
 
-def item(reading: Reading, now: datetime) -> Item:
-    lvl = level(reading)
+def item(reading: Reading, now: datetime, low: int = LOW_PERCENT, high: int = HIGH_USAGE_PERCENT) -> Item:
+    lvl = level(reading, low, high)
     unavailable = reading.error is not None
     offline = lvl is Level.OFFLINE
     has_number = not offline and not unavailable and reading.percent is not None
@@ -104,12 +104,11 @@ def _sensor_glyph(sensor: str) -> str:
     return SENSOR_GLYPHS["cpu"]
 
 
-def metric_item(metric: Metric, now: datetime) -> Item:
+def metric_item(metric: Metric, now: datetime, busy: int = BUSY_PERCENT, hot: int = HOT_CELSIUS) -> Item:
     """A sensor as a panel item: its glyph and a short value — `1.2M`, `37%`, `52°`."""
     value = metric.value
     hot = value is not None and (
-        (metric.unit is Unit.CELSIUS and value >= HOT_CELSIUS)
-        or (metric.unit is Unit.PERCENT and value >= BUSY_PERCENT)
+        (metric.unit is Unit.CELSIUS and value >= hot) or (metric.unit is Unit.PERCENT and value >= busy)
     )
     text = short(metric) + ("%" if metric.unit is Unit.PERCENT and value is not None else "")
     state = metric.error or f"{text}{'/s' if metric.unit is Unit.BYTES_PER_SECOND else ''}"
@@ -131,7 +130,7 @@ def metric_item(metric: Metric, now: datetime) -> Item:
 ORDER = [Kind.CLAUDE, Kind.KEYBOARD, Kind.MOUSE, Kind.HEADSET, Kind.GAMEPAD, Kind.PHONE, Kind.OTHER]
 
 
-def items(readings: list[Reading], now: datetime) -> list[Item]:
+def items(readings: list[Reading], now: datetime, low: int = LOW_PERCENT, high: int = HIGH_USAGE_PERCENT) -> list[Item]:
     """What the panel shows, in a stable order: by kind, then name — items do not jump around.
 
     A disconnected device is not shown at all (owner, 2026-10-21): a cached number says nothing, and a
@@ -139,4 +138,4 @@ def items(readings: list[Reading], now: datetime) -> list[Item]:
     """
     shown = [r for r in readings if level(r) is not Level.OFFLINE]
     ordered = sorted(shown, key=lambda r: (ORDER.index(r.kind), r.device_id, r.name.lower()))
-    return [item(r, now) for r in ordered]
+    return [item(r, now, low, high) for r in ordered]

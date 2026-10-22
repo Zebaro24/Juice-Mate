@@ -237,3 +237,23 @@ Wi-Fi glyph (16 px), at 96 DPI, scaled with the taskbar's DPI (re-measured 2026-
   window. A window that was ≥ 80 % used and resets earns a "limit is back" toast.
 - **Left click** opens what the item belongs to: usage → claude.ai/settings/usage, devices → Windows'
   Bluetooth settings, sensors → Task Manager.
+
+## 6a. Settings — the owner's word on every item (owner, 2026-10-22)
+
+All in `settings.json` (`settings.py`), read by the poll loop every tick, so a change shows within
+two seconds; the menu and the settings window (step 13) only change fields and save.
+
+- **Sources** on/off (`sources`): Claude usage, Bluetooth devices, HATOR mouse. Off = not polled at
+  all; the Claude menu items go too. Menu → **Sources**.
+- **Devices** (`devices`, by item key `source:device_id`): a name, an icon (a `Kind` — for a device
+  whose kind was guessed wrong), hidden. A usage window keeps its spark whatever is set
+  (`core/arrange.py: personalise`).
+- **Order** (`order`): item keys named come first in that order; the rest follow in the default order,
+  so a new device never jumps ahead of the arranged ones.
+- **Placement** (`placement`): `left`, `right`, `second-left`, `second-right`. Default: sensors left,
+  everything else right. Until the second monitor's strips exist (step 16) `second-*` join the main ones.
+- **Thresholds**: battery red below `battery_low` (20), its notification below `battery_alert` (15),
+  Claude red from `usage_high` (80), a sensor red from `busy_percent` (95) or `hot_celsius` (85).
+- **Notifications** by kind (`alerts`): `battery`, `usage_pace`, `usage_back`, `news`.
+- A broken field falls back to its own default and is logged; switch maps (`sources`, `alerts`) keep
+  defaults for keys the file does not name, so a source added in an update starts on.
