@@ -1,10 +1,15 @@
-"""The panel window: a layered child of the taskbar (docs/architecture.md §4b).
+"""The panel windows: layered children of the taskbar (docs/architecture.md §4b).
+
+Two strips: batteries and usage just left of the notification area, system sensors at the taskbar's
+left end — after the Widgets (weather) button when there is one. A left-aligned taskbar (or Windows
+10) keeps its Start button there, so then everything goes into the right strip.
 
 Threading: everything Win32 happens on the panel's own thread, which runs a message loop. Other
 threads only call `show()` / `stop()`, which hand data over under a lock and post a message.
 
 **This thread must never block.** A window parented into Explorer's taskbar shares its input queue
-with the taskbar; a hang here would freeze the taskbar itself. Sources are polled elsewhere.
+with the taskbar; a hang here would freeze the taskbar itself. Sources are polled elsewhere, and the
+Widgets button is looked up on a thread of its own (uia.py).
 """
 
 import ctypes
@@ -13,11 +18,14 @@ import threading
 import winreg
 from collections.abc import Callable
 from ctypes import wintypes as w
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+from PIL import Image
 
 from juice_mate.core.display import Item
 from juice_mate.panel import win32 as api
 from juice_mate.panel.render import Span, Theme, premultiplied_bgra, render
+from juice_mate.panel.uia import LeftEdge, centred_taskbar
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +33,7 @@ _CLASS = "JuiceMatePanel"
 _WM_UPDATE = api.WM_APP + 1
 _WATCHDOG_TIMER = 1
 _WATCHDOG_MS = 2000
-_MARGIN = 8  # gap between the panel and the notification area, at 96 DPI
+_MARGIN = 8  # gap between a strip and its neighbour (notification area, Widgets button), at 96 DPI
 
 
 @dataclass(frozen=True)
@@ -36,6 +44,28 @@ class MenuEntry:
     action: Callable[[], None] | None = None
     checked: bool = False
     children: "list[MenuEntry | None] | None" = None
+
+
+@dataclass
+class _Strip:
+    """One layered child window of the taskbar, with its own hover areas and tooltip."""
+
+    hwnd: int | None = None
+    tooltip: int | None = None
+    tools: int = 0
+    spans: list[Span] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class _Geometry:
+    """Everything the layout depends on: a change re-paints (see the watchdog)."""
+
+    taskbar: tuple[int, int, int, int]
+    notify_left: int  # screen x where the notification area starts
+    left_free: bool  # the taskbar's left end is not the Start button
+    widgets_right: int | None  # screen x where the Widgets button ends
+    scale: float
+    light: bool
 
 
 def _light_theme() -> bool:
@@ -59,15 +89,15 @@ class Panel:
         self._menu_entries = menu
         self._on_click = on_click
         self._lock = threading.Lock()
-        self._items: list[Item] = []
+        self._right_items: list[Item] = []
+        self._left_items: list[Item] = []
         self._attached = threading.Event()
         self._started = threading.Event()
         self._control: int | None = None  # hidden top-level window: messages, menu owner
-        self._panel: int | None = None  # the child of the taskbar
-        self._tooltip: int | None = None
-        self._tools = 0
-        self._spans: list[Span] = []
-        self._anchor: tuple[object, ...] = ()
+        self._right = _Strip()  # batteries and usage, by the notification area
+        self._left = _Strip()  # system sensors, at the taskbar's left end
+        self._widgets = LeftEdge(self._taskbar)
+        self._anchor: _Geometry | None = None
         self._light = _light_theme()
         self._proc = api.WNDPROC(self._wndproc)  # keep a reference: the callback must outlive the window
         self._taskbar_created = api.user32.RegisterWindowMessageW("TaskbarCreated")
@@ -80,13 +110,16 @@ class Panel:
         self._thread.start()
         return self._attached.wait(timeout)
 
-    def show(self, items: list[Item]) -> None:
+    def show(self, right: list[Item], left: list[Item] | None = None) -> None:
+        """`right` goes by the notification area, `left` to the taskbar's left end — or in front of
+        `right` when the left end is taken."""
         with self._lock:
-            self._items = list(items)
+            self._right_items, self._left_items = list(right), list(left or [])
         if self._started.is_set() and self._control:
             api.user32.PostMessageW(self._control, _WM_UPDATE, 0, 0)
 
     def stop(self) -> None:
+        self._widgets.stop()
         if self._control:
             api.user32.PostMessageW(self._control, api.WM_CLOSE, 0, 0)
         self._thread.join(timeout=3)
@@ -109,6 +142,7 @@ class Panel:
         ctypes.WinDLL("comctl32").InitCommonControls()
         api.user32.SetTimer(self._control, _WATCHDOG_TIMER, _WATCHDOG_MS, None)
         self._started.set()
+        self._widgets.start()
         self._attach()
         msg = w.MSG()
         while api.user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
@@ -123,28 +157,42 @@ class Panel:
         taskbar = self._taskbar()
         if not taskbar:
             return
-        hinst = api.kernel32.GetModuleHandleW(None)
-        ex = api.WS_EX_LAYERED | api.WS_EX_TOOLWINDOW | api.WS_EX_NOACTIVATE
-        panel = api.user32.CreateWindowExW(
-            ex, _CLASS, "Juice-Mate panel", api.WS_POPUP, 0, 0, 1, 1, None, None, hinst, None
-        )
-        if not panel or not api.user32.SetParent(panel, taskbar):
-            log.warning("could not attach to the taskbar (error %s)", ctypes.get_last_error())
-            if panel:
-                api.user32.DestroyWindow(panel)
-            return
-        style = api.user32.GetWindowLongPtrW(panel, api.GWL_STYLE)
-        api.user32.SetWindowLongPtrW(panel, api.GWL_STYLE, (style & ~api.WS_POPUP) | api.WS_CHILD | api.WS_CLIPSIBLINGS)
-        self._panel = panel
-        self._make_tooltip()
-        self._anchor = ()
+        for strip in (self._right, self._left):
+            strip.hwnd = self._child(taskbar)
+            if not strip.hwnd:
+                self._detach()
+                return
+            strip.tooltip = self._make_tooltip(strip.tooltip)
+            strip.tools = 0
+        self._anchor = None
         self._paint()
         self._attached.set()
 
-    def _make_tooltip(self) -> None:
-        if self._tooltip:
-            api.user32.DestroyWindow(self._tooltip)
-        self._tooltip = api.user32.CreateWindowExW(
+    def _child(self, taskbar: int) -> int | None:
+        hinst = api.kernel32.GetModuleHandleW(None)
+        ex = api.WS_EX_LAYERED | api.WS_EX_TOOLWINDOW | api.WS_EX_NOACTIVATE
+        hwnd: int | None = api.user32.CreateWindowExW(
+            ex, _CLASS, "Juice-Mate panel", api.WS_POPUP, 0, 0, 1, 1, None, None, hinst, None
+        )
+        if not hwnd or not api.user32.SetParent(hwnd, taskbar):
+            log.warning("could not attach to the taskbar (error %s)", ctypes.get_last_error())
+            if hwnd:
+                api.user32.DestroyWindow(hwnd)
+            return None
+        style = api.user32.GetWindowLongPtrW(hwnd, api.GWL_STYLE)
+        api.user32.SetWindowLongPtrW(hwnd, api.GWL_STYLE, (style & ~api.WS_POPUP) | api.WS_CHILD | api.WS_CLIPSIBLINGS)
+        return hwnd
+
+    def _detach(self) -> None:
+        for strip in (self._right, self._left):
+            if strip.hwnd and api.user32.IsWindow(strip.hwnd):
+                api.user32.DestroyWindow(strip.hwnd)
+            strip.hwnd = None
+
+    def _make_tooltip(self, old: int | None) -> int | None:
+        if old:
+            api.user32.DestroyWindow(old)
+        tooltip: int | None = api.user32.CreateWindowExW(
             api.WS_EX_TOPMOST,
             api.TOOLTIPS_CLASS,
             None,
@@ -158,17 +206,17 @@ class Panel:
             api.kernel32.GetModuleHandleW(None),
             None,
         )
-        self._tools = 0
+        return tooltip
 
-    def _set_tools(self, spans: list[Span], height: int) -> None:
-        if not self._tooltip or not self._panel:
+    def _set_tools(self, strip: _Strip, spans: list[Span]) -> None:
+        if not strip.tooltip or not strip.hwnd:
             return
         info = api.TOOLINFOW()
         info.cbSize = ctypes.sizeof(api.TOOLINFOW)
-        info.hwnd = self._panel
-        for i in range(self._tools):
+        info.hwnd = strip.hwnd
+        for i in range(strip.tools):
             info.uId = i
-            api.user32.SendMessageW(self._tooltip, api.TTM_DELTOOLW, 0, ctypes.addressof(info))
+            api.user32.SendMessageW(strip.tooltip, api.TTM_DELTOOLW, 0, ctypes.addressof(info))
         texts = []
         for i, span in enumerate(spans):
             info.uFlags = api.TTF_SUBCLASS
@@ -177,30 +225,53 @@ class Panel:
             text = ctypes.create_unicode_buffer(span.tooltip)
             texts.append(text)  # the tooltip copies the text during the call
             info.lpszText = ctypes.cast(text, w.LPWSTR)
-            api.user32.SendMessageW(self._tooltip, api.TTM_ADDTOOLW, 0, ctypes.addressof(info))
-        self._tools = len(spans)
+            api.user32.SendMessageW(strip.tooltip, api.TTM_ADDTOOLW, 0, ctypes.addressof(info))
+        strip.tools = len(spans)
+        strip.spans = spans
 
-    def _paint(self) -> None:
-        """Re-render and put the panel just left of the notification area."""
-        taskbar = self._taskbar()
-        panel = self._panel
-        if not taskbar or not panel:
-            return
+    def _geometry(self, taskbar: int) -> _Geometry:
         notify = api.user32.FindWindowExW(taskbar, None, "TrayNotifyWnd", None)
         tb = api.rect(taskbar)
-        right = api.rect(notify)[0] if notify else tb[2]
-        height = tb[3] - tb[1]
-        scale = (api.user32.GetDpiForWindow(taskbar) or 96) / 96
+        left_free = centred_taskbar()
+        return _Geometry(
+            taskbar=tb,
+            notify_left=api.rect(notify)[0] if notify else tb[2],
+            left_free=left_free,
+            widgets_right=self._widgets.value if left_free else None,
+            scale=(api.user32.GetDpiForWindow(taskbar) or 96) / 96,
+            light=self._light,
+        )
+
+    def _paint(self) -> None:
+        """Re-render both strips and put them in place."""
+        taskbar = self._taskbar()
+        if not taskbar or not self._right.hwnd or not self._left.hwnd:
+            return
+        g = self._geometry(taskbar)
+        height = g.taskbar[3] - g.taskbar[1]
+        margin = round(_MARGIN * g.scale)
         with self._lock:
-            items = list(self._items)
-        image, spans = render(items, height, Theme.for_taskbar(self._light), scale)
-        width = image.width if items else 1
-        x = right - tb[0] - width - round(_MARGIN * scale)
-        api.user32.SetWindowPos(panel, api.HWND_TOP, x, 0, width, height, api.SWP_NOACTIVATE | api.SWP_SHOWWINDOW)
-        self._blit(panel, image.width, height, premultiplied_bgra(image))
-        self._spans = spans
-        self._set_tools(spans, height)
-        self._anchor = (tb, right, scale, self._light)
+            right_items, left_items = list(self._right_items), list(self._left_items)
+        if not g.left_free:
+            right_items, left_items = left_items + right_items, []
+        theme = Theme.for_taskbar(self._light)
+
+        image, spans = render(right_items, height, theme, g.scale)
+        width = image.width if right_items else 1
+        self._place(self._right, g.notify_left - g.taskbar[0] - width - margin, width, height, image, spans)
+
+        image, spans = render(left_items, height, theme, g.scale)
+        width = image.width if left_items else 1
+        start = g.widgets_right - g.taskbar[0] + margin if g.widgets_right is not None else margin
+        self._place(self._left, start, width, height, image, spans)
+        self._anchor = g
+
+    def _place(self, strip: _Strip, x: int, width: int, height: int, image: Image.Image, spans: list[Span]) -> None:
+        if not strip.hwnd:
+            return
+        api.user32.SetWindowPos(strip.hwnd, api.HWND_TOP, x, 0, width, height, api.SWP_NOACTIVATE | api.SWP_SHOWWINDOW)
+        self._blit(strip.hwnd, image.width, height, premultiplied_bgra(image))
+        self._set_tools(strip, spans)
 
     def _blit(self, hwnd: int, width: int, height: int, pixels: bytes) -> None:
         header = api.BITMAPINFOHEADER()
@@ -240,19 +311,20 @@ class Panel:
             api.user32.ReleaseDC(None, screen)
 
     def _watchdog(self) -> None:
-        """Explorer restarted, the taskbar moved or resized, the theme flipped → re-attach or re-layout."""
+        """Explorer restarted, the taskbar moved or resized, the theme flipped, the Widgets button came,
+        went or widened → re-attach or re-layout."""
         taskbar = self._taskbar()
-        if self._panel and (not api.user32.IsWindow(self._panel) or api.user32.GetParent(self._panel) != taskbar):
-            self._panel = None
-        if not self._panel:
+        lost = any(
+            not strip.hwnd or not api.user32.IsWindow(strip.hwnd) or api.user32.GetParent(strip.hwnd) != taskbar
+            for strip in (self._right, self._left)
+        )
+        if lost:
+            self._detach()
             if taskbar:
                 self._attach()
             return
         self._light = _light_theme()
-        notify = api.user32.FindWindowExW(taskbar, None, "TrayNotifyWnd", None)
-        right = api.rect(notify)[0] if notify else api.rect(taskbar)[2]
-        scale = (api.user32.GetDpiForWindow(taskbar) or 96) / 96
-        if self._anchor != (api.rect(taskbar), right, scale, self._light):
+        if taskbar and self._anchor != self._geometry(taskbar):
             self._paint()
 
     def _build(self, entries: list[MenuEntry | None], actions: list[Callable[[], None]]) -> int:
@@ -282,10 +354,10 @@ class Panel:
         if 1 <= command <= len(actions):
             actions[command - 1]()
 
-    def _click(self, lparam: int) -> None:
+    def _click(self, strip: _Strip, lparam: int) -> None:
         x = ctypes.c_short(lparam & 0xFFFF).value
         y = ctypes.c_short((lparam >> 16) & 0xFFFF).value
-        for span in self._spans:
+        for span in strip.spans:
             if span.left <= x < span.right and span.top <= y < span.bottom:
                 self._on_click(span.key)
                 return
@@ -299,28 +371,27 @@ class Panel:
                 if msg == api.WM_TIMER and wparam == _WATCHDOG_TIMER:
                     self._watchdog()
                     return 0
-                if msg == self._taskbar_created:  # Explorer restarted: the old taskbar and our child are gone
-                    self._panel = None
+                if msg == self._taskbar_created:  # Explorer restarted: the old taskbar and our children are gone
+                    self._detach()
                     self._attach()
                     return 0
                 if msg == api.WM_CLOSE:
-                    if self._panel:
-                        api.user32.DestroyWindow(self._panel)
-                        self._panel = None
+                    self._detach()
                     api.user32.DestroyWindow(hwnd)
                     return 0
                 if msg == api.WM_DESTROY:
                     api.user32.PostQuitMessage(0)
                     return 0
-            elif hwnd == self._panel:
+            elif hwnd and hwnd in (self._right.hwnd, self._left.hwnd):
+                strip = self._right if hwnd == self._right.hwnd else self._left
                 if msg == api.WM_RBUTTONUP:
                     self._menu()
                     return 0
                 if msg == api.WM_LBUTTONUP:
-                    self._click(lparam)
+                    self._click(strip, lparam)
                     return 0
                 if msg == api.WM_DESTROY:
-                    self._panel = None
+                    strip.hwnd = None
                     return 0
         except Exception:  # an exception must not cross back into Windows' message dispatch
             log.exception("panel message %#x", msg)

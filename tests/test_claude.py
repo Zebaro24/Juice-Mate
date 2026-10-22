@@ -186,3 +186,48 @@ def test_signing_out_drops_the_old_numbers(tmp_path: Path) -> None:
     [reading] = source.poll()
     assert reading.error is not None
     assert "open Claude Code" in reading.error
+
+
+def test_the_percent_is_rounded_down_like_claude_codes_usage(tmp_path: Path) -> None:
+    body = {"five_hour": {"utilization": 2.9, "resets_at": None}}
+    [session] = Claude(credentials(tmp_path), Http(body=body), clock=lambda: 1.8e9).poll()
+    assert session.percent == 2
+
+
+class FakeRun:
+    def __init__(self) -> None:
+        self.reasons: list[str] = []
+        self.finished = 0
+
+    def request(self, reason: str) -> None:
+        self.reasons.append(reason)
+
+
+def test_an_expired_token_runs_claude_code_and_its_end_asks_again(tmp_path: Path) -> None:
+    run, now = FakeRun(), [1.8e9]
+    claude = Claude(credentials(tmp_path, expires_ms=1000), Http(), clock=lambda: now[0], run=run)  # type: ignore[arg-type]
+    claude.poll()
+    assert run.reasons == ["the token has expired"]
+    credentials(tmp_path)
+    run.finished = 1  # Claude Code renewed the token
+    now[0] += 1
+    session, _ = claude.poll()
+    assert session.percent == 10
+
+
+@pytest.mark.parametrize(
+    ("five_hour", "keep", "runs"),
+    [
+        ({"utilization": 0.0, "resets_at": None}, True, True),
+        ({"utilization": 0.0, "resets_at": "2020-01-01T00:00:00+00:00"}, True, True),
+        ({"utilization": 4.0, "resets_at": "2099-01-01T00:00:00+00:00"}, True, False),
+        ({"utilization": 0.0, "resets_at": None}, False, False),
+    ],
+)
+def test_an_idle_five_hour_window_is_started_only_when_asked(
+    tmp_path: Path, five_hour: dict[str, Any], keep: bool, runs: bool
+) -> None:
+    run = FakeRun()
+    body = {"five_hour": five_hour, "seven_day": ANSWER["seven_day"]}
+    Claude(credentials(tmp_path), Http(body=body), clock=lambda: 1.8e9, run=run, keep_window=lambda: keep).poll()  # type: ignore[arg-type]
+    assert bool(run.reasons) is runs

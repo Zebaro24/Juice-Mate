@@ -1,7 +1,8 @@
 """The owner's choices that outlive a restart — %LOCALAPPDATA%\\JuiceMate\\settings.json.
 
-Only what the menu can change lives here. A missing or broken file means the defaults: the app must
-start on a clean PC (the second one) without anyone writing a config.
+Only what the menu can change lives here, plus `claude_prompt`, edited in the file by hand. A missing or
+broken file, or a broken field, means the defaults: the app must start on a clean PC (the second one)
+without anyone writing a config.
 """
 
 import json
@@ -14,6 +15,9 @@ log = logging.getLogger(__name__)
 
 # What TrafficMonitor showed on the owner's taskbar (config.ini, 2026-10-20), minus CPU temperature.
 DEFAULT_SENSORS = ["net.up", "net.down", "cpu.load", "gpu.load"]
+# What the invisible Claude Code run asks (sources/claude_run.py); its answer becomes a notification.
+# An empty string: the run still renews the token and starts the window, silently.
+DEFAULT_PROMPT = "Tell me one surprising, little-known fact from science, history or technology in two sentences."
 
 
 def _path() -> Path:
@@ -23,6 +27,10 @@ def _path() -> Path:
 @dataclass
 class Settings:
     sensors: list[str] = field(default_factory=lambda: list(DEFAULT_SENSORS))
+    # Run Claude Code when the 5-hour window is not running. Off until ticked in the menu: it spends
+    # the account's quota, and the second PC's user never asked for it.
+    keep_claude_window: bool = False
+    claude_prompt: str = DEFAULT_PROMPT
 
     @staticmethod
     def load(path: Path | None = None) -> "Settings":
@@ -34,10 +42,17 @@ class Settings:
         except (OSError, ValueError):
             log.exception("settings unreadable, using defaults")
             return Settings()
-        sensors = raw.get("sensors") if isinstance(raw, dict) else None
-        if not isinstance(sensors, list) or not all(isinstance(s, str) for s in sensors):
+        if not isinstance(raw, dict):
             return Settings()
-        return Settings(sensors=sensors)
+        settings = Settings()
+        sensors = raw.get("sensors")
+        if isinstance(sensors, list) and all(isinstance(s, str) for s in sensors):
+            settings.sensors = sensors
+        if isinstance(raw.get("keep_claude_window"), bool):
+            settings.keep_claude_window = raw["keep_claude_window"]
+        if isinstance(raw.get("claude_prompt"), str):
+            settings.claude_prompt = raw["claude_prompt"]
+        return settings
 
     def save(self, path: Path | None = None) -> None:
         path = path or _path()

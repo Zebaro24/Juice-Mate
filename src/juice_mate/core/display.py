@@ -66,11 +66,14 @@ def item(reading: Reading, now: datetime) -> Item:
     offline = lvl is Level.OFFLINE
     has_number = not offline and not unavailable and reading.percent is not None
     text = f"{reading.percent}%" if has_number else UNAVAILABLE if unavailable else ""
+    # Red is "act now": a battery under 20%, a usage window past 80%, or one that runs out before it
+    # resets at the pace of the last hour.
+    critical = lvl is Level.LOW or (has_number and reading.limit_at is not None)
     return Item(
         key=f"{reading.source}:{reading.device_id}",
         glyph=GLYPHS[reading.kind],
         text=text,
-        tone=Tone.CRITICAL if lvl is Level.LOW else Tone.DIM if (offline or unavailable) else Tone.NORMAL,
+        tone=Tone.CRITICAL if critical else Tone.DIM if (offline or unavailable) else Tone.NORMAL,
         charging=lvl is Level.CHARGING,
         tag=reading.tag or "",
         group="usage" if reading.kind is Kind.CLAUDE else "devices",

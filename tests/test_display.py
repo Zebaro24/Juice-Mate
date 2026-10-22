@@ -85,3 +85,10 @@ def test_pixels_are_premultiplied_bgra() -> None:
 
 def test_bolt_glyph_is_from_the_icon_font() -> None:
     assert BOLT == "\ue945"
+
+
+def test_a_usage_window_that_runs_out_before_it_resets_is_red() -> None:
+    usage = reading(kind=Kind.CLAUDE, percent=40)
+    assert item(usage, NOW).tone is Tone.NORMAL
+    assert item(reading(kind=Kind.CLAUDE, percent=40, limit_at=NOW), NOW).tone is Tone.CRITICAL
+    assert item(reading(kind=Kind.CLAUDE, percent=85), NOW).tone is Tone.CRITICAL

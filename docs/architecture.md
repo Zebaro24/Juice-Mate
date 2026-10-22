@@ -60,14 +60,21 @@ A failing source returns an error reading, never raises into the poll loop.
 ### 3.3 Claude usage limits — the fragile one
 
 - Token: Claude Code's OAuth token from `~/.claude/.credentials.json`. **Read only. Never refresh it** —
-  refreshing rotates the token and logs Claude Code out. Expired token → "re-open Claude Code" state,
-  not a refresh; the file is re-read every poll (no request) so a token Claude Code renews shows at once.
+  refreshing rotates the token and logs Claude Code out. Expired token → Juice-Mate runs Claude Code
+  itself, invisibly (`sources/claude_run.py`): `claude -p <prompt> --model haiku`, no tools, no MCP,
+  no session file, no user settings. Claude Code renews its own token as it always does; the file is
+  re-read every poll (no request), so the renewed token shows at once.
+- **Keeping the 5-hour window running** (owner, 2026-10-22; a menu checkbox, off by default — it spends the account's quota): when the
+  answer shows no running 5-hour window, the same run opens one. At most one run per 30 min. The
+  prompt is `claude_prompt` in `settings.json` (a "surprising fact" by default) and its answer comes
+  as a toast; an empty prompt renews silently. One run costs a fraction of a percent of the window.
 - Request (confirmed 2026-10-21): `GET https://api.anthropic.com/api/oauth/usage`, headers
   `Authorization: Bearer <accessToken>` and `anthropic-beta: oauth-2025-04-20` → `five_hour` and
   `seven_day`, each `{utilization: % used, resets_at: ISO time}`. The answer also carries a dozen
   code-named experimental keys — **only those two are read**; parsing lives in `core/usage.py`, and an
   answer that no longer fits becomes "the usage answer changed", never a crash.
-- On the panel: the ✳ glyph (Segoe UI Symbol) + the larger % used of the two windows; red from 80 %.
+- On the panel: the ✳ glyph (Segoe UI Symbol) + % used, rounded down like Claude Code's `/usage`;
+  red from 80 % or when the pace runs the window out before it resets.
   Tooltip: both windows with the time to reset. 429 → five minutes' pause; 401/403 → "open Claude Code".
 - One request every three minutes (once a minute drew 429s after an hour); on 429 a pause of 5 min,
   doubling to 30. A passing failure keeps the last numbers on the panel with "as of HH:MM" in the
@@ -142,8 +149,10 @@ How, chosen for robustness:
   `Shell_TrayWnd` (`SetParent`, `WS_CHILD`). It then moves, hides (auto-hide, full-screen games) and
   stacks with the taskbar for free. Rejected: a topmost overlay — it fights the taskbar for z-order,
   shows over full-screen apps, and flickers when the taskbar takes focus.
-- **Placement.** Windows 11: right-aligned just left of `TrayNotifyWnd` (still a Win32 child of
-  `Shell_TrayWnd`), plus a configurable offset. Windows 10: shrink `MSTaskSwWClass` inside
+- **Placement.** Two strips (owner, 2026-10-22). Batteries and usage: right-aligned just left of
+  `TrayNotifyWnd`. System sensors: the taskbar's left end, after the Widgets (weather) button, whose
+  right edge comes from UI Automation (AutomationId `WidgetsButton`, `panel/uia.py`, on its own
+  thread). A left-aligned taskbar (`TaskbarAl` = 0) has Start there, so the sensors join the right strip. Windows 10: shrink `MSTaskSwWClass` inside
   `ReBarWindow32` and sit in the gap — TrafficMonitor's own Win10 method.
 - **Drawing.** Pillow renders RGBA, `UpdateLayeredWindow` pushes it with per-pixel alpha, so it blends
   with any taskbar colour or Mica (layered child windows work since Windows 8). Text colour follows
@@ -187,13 +196,13 @@ glyph and a number, nothing else — like the clock and the Wi-Fi / volume glyph
 ```
 
 Measured against the taskbar's own clock (digits 9 px tall, rows centred at y 15 and 31 of 48) and
-Wi-Fi glyph (16 px), at 96 DPI, scaled with the taskbar's DPI:
+Wi-Fi glyph (16 px), at 96 DPI, scaled with the taskbar's DPI (re-measured 2026-10-22):
 
 | Element | Value | Why |
 | ------- | ----- | --- |
-| Rows | centres at 15/48 and 31/48 of the height | the clock's rows — the panel reads as part of it |
-| Numbers | Segoe UI Variable 14 px, weight 500, gamma-lifted alpha | digits ~10 px tall; 12 px read "small" to the owner |
-| Glyphs | 16 px, drawn at 4×, strokes grown by a 3×3 max filter, scaled down | the Wi-Fi glyph's size; owner asked for thicker lines |
+| Rows | centres at 14/48 and 32/48 of the height | 2 px further apart than the clock's: 16 px glyphs stuck together (owner) |
+| Numbers | Segoe UI Variable 13 px, weight 450, whole pixels, contrast curve on alpha | digits 9 px tall, the clock's own; 12 px read "tiny" (owner) |
+| Glyphs | 16 px, drawn at 4×, strokes grown by a 3×3 max filter (5×5 for ✳), scaled down | the Wi-Fi glyph's size; owner asked for thicker lines, and a bolder ✳ |
 | Tags `5h` / `7d` | the number's size (owner), ~75 % alpha | a smaller tag was unreadable on a red taskbar |
 | Number slot | right-aligned, at least as wide as `00%` | 9 → 10 % and 88 → 89 % move nothing; % signs line up |
 | Gaps | glyph → number 5, columns 12, usage ↔ devices 18, padding 8 | spacing separates the groups; no divider lines |
@@ -206,7 +215,8 @@ Wi-Fi glyph (16 px), at 96 DPI, scaled with the taskbar's DPI:
   system red. Charging → a small bolt before the number. Unavailable → dimmed, `!` for a number, the
   reason in the tooltip (a badge over the glyph is not a Windows pattern).
 - **Disconnected devices are not shown at all** — a cached number says nothing (owner, 2026-10-21).
-- **Usage limits** → two items, one per window, ✳ `5h` and ✳ `7d` + % used; red from 80 %.
+- **Usage limits** → two items, one per window, ✳ `5h` and ✳ `7d` + % used; red from 80 % or when
+  the pace says the window runs out before it resets. Sensors are red from 95 % load or 85 °C.
 - **Tooltip** on hover: the full name, state, the time of the reading; for usage the window's time
   to reset. Hover areas split each column at the middle.
 - A toast once when a device drops below 15 % (not again until it recovers).

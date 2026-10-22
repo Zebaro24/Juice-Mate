@@ -1,8 +1,8 @@
 """Claude usage limits — the same call Claude Code's `/usage` makes (docs/architecture.md §3.3).
 
 **The token is only ever read, never refreshed.** Claude Code rotates its refresh token on use; a
-refresh from here would log Claude Code out. An expired access token → "open Claude Code", and
-Claude Code refreshes it the next time it runs.
+refresh from here would log Claude Code out. An expired access token → Claude Code is run once,
+invisibly (`claude_run.py`), and renews it itself; until then the item says "open Claude Code".
 
 The endpoint is internal and undocumented. Confirmed on 2026-10-21: `GET /api/oauth/usage` with the
 `oauth-2025-04-20` beta header → 200 with `five_hour` / `seven_day` windows. Asked once a minute it
@@ -10,6 +10,7 @@ started answering 429 after about an hour, so it is asked every three minutes an
 """
 
 import json
+import math
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -19,6 +20,7 @@ import httpx
 
 from juice_mate.core.reading import Kind, Reading
 from juice_mate.core.usage import UsageFormatError, Window, limit_at, parse, summary
+from juice_mate.sources.claude_run import ClaudeRun
 
 SOURCE = "claude"
 URL = "https://api.anthropic.com/api/oauth/usage"
@@ -48,8 +50,15 @@ class Claude:
         credentials: Path = CREDENTIALS,
         get: Callable[..., httpx.Response] = httpx.get,
         clock: Callable[[], float] = time.time,
+        run: ClaudeRun | None = None,
+        keep_window: Callable[[], bool] = lambda: False,
     ) -> None:
+        """`run` renews an expired token through Claude Code; with `keep_window` on it also starts the
+        5-hour window whenever it is not running."""
         self._credentials = credentials
+        self._run = run
+        self._keep_window = keep_window
+        self._runs_seen = 0
         self._get = get
         self._clock = clock
         self._next_request = 0.0
@@ -63,6 +72,9 @@ class Claude:
 
     def poll(self) -> list[Reading]:
         now = self._clock()
+        if self._run is not None and self._run.finished != self._runs_seen:
+            self._runs_seen = self._run.finished
+            self._next_request = now  # Claude Code just ran: a fresh token, maybe a new window
         if now >= self._next_request:
             self._next_request = now + INTERVAL
             self._fetch(now)
@@ -89,7 +101,7 @@ class Claude:
                     SOURCE,
                     w.key,
                     f"{NAME} {w.label}",
-                    round(w.used),
+                    math.floor(w.used),  # as Claude Code's /usage: 2.6% used is "2%"
                     kind=Kind.CLAUDE,
                     tag=w.tag,
                     note=summary([w], now_utc) + pace + suffix,
@@ -146,6 +158,8 @@ class Claude:
         except PermissionError as e:
             if isinstance(e, _ExpiredError):
                 self._next_request = now  # a renewed token shows on the next poll, not three minutes later
+                if self._run is not None:
+                    self._run.request("the token has expired")
             self._windows, self._failure = [], str(e)  # a signed-out account's old numbers mean nothing
             return
         except UsageFormatError as e:
@@ -156,3 +170,10 @@ class Claude:
             return
         self._good_at, self._failure, self._backoff = now, None, BACKOFF_FIRST
         self._remember(now)
+        if self._run is not None and self._keep_window() and self._idle(now):
+            self._run.request("the 5-hour window is not running")
+
+    def _idle(self, now: float) -> bool:
+        """No 5-hour window is counting: none in the answer, no reset time, or one already past."""
+        session = next((w for w in self._windows if w.key == "five_hour"), None)
+        return session is None or session.resets_at is None or session.resets_at.timestamp() <= now

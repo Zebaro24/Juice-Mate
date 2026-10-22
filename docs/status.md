@@ -105,3 +105,13 @@ package, a portable zip and `releases.win.json` to GitHub Releases.
 Step 08: system sensors on the panel (2 s refresh, a Show submenu with checkmarks, settings.json),
 the usage pace forecast with its toasts, and left-click targets. Rendered with live data on the
 owner's PC: `✳ 5h 29% / 7d 60% · 🖱 86% / 🎧 80% · ↑ 16K / ↓ 2K · CPU 28% / GPU 41% · 83°`.
+
+## Two strips, clock-sized text, Claude Code runs (2026-10-22)
+
+The panel is two strips: sensors at the taskbar's left end after the weather widget (UI Automation
+found its edge at x 158 on the owner's PC), batteries and usage by the notification area. Numbers are
+13 px at weight 450, whole-pixel positions and a contrast curve — 9 px digits, measured equal to the clock's — and the rows sit 2 px further apart. Usage %
+rounds down like Claude Code's `/usage` (it showed 2 % where the panel said 3 %). An expired token or
+an idle 5-hour window makes Juice-Mate run `claude -p` on Haiku once (tried by hand: 3 s, answer in
+Russian); its answer comes as a toast. ⚠️ Not yet seen in the app itself: a run on a real expiry or
+idle window, the toast, a left-aligned taskbar.

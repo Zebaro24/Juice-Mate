@@ -18,13 +18,14 @@ _TEXT_FONTS = ("SegUIVar.ttf", "segoeui.ttf")
 _SYMBOL_FONTS = ("seguisym.ttf",)  # glyphs outside the icon fonts, e.g. Claude's spark
 _PRIVATE_USE = range(0xE000, 0xF900)  # where the icon fonts keep their glyphs
 
-# At 96 DPI, for two rows in a 48 px taskbar — from the design council of 2026-10-21, measured against
-# the taskbar's own clock (digits 9 px tall, rows centred at y 15 and 31) and Wi-Fi glyph (16 px).
+# At 96 DPI, for two rows in a 48 px taskbar. Measured on the owner's screen, 2026-10-22: the clock's
+# digits are 9 px tall, its rows centred at y 15 and 31. 13 px Segoe UI Variable gives the same 9 px
+# digits (12 px gives 8: "tiny", owner); the rows sit 2 px further apart than the clock's (owner).
 GLYPH_PX = 16
-TEXT_PX = 14  # digits ~10 px tall: a touch above the clock; the owner found 12 px "small"
-TEXT_WEIGHT = 500  # between Regular and Semibold: FreeType's grey antialiasing reads lighter than ClearType
+TEXT_PX = 13
+TEXT_WEIGHT = 450  # a half step above the clock's Regular: with the curve below, the clock's own ink
 BOLT_PX = 10
-ROWS = (15 / 48, 31 / 48)  # row centres as a share of the taskbar height: the clock's rows
+ROWS = (14 / 48, 32 / 48)  # row centres as a share of the taskbar height
 GAP_INNER = 5  # glyph to number
 GAP_COLUMN = 12  # between columns of one group
 GAP_GROUP = 18  # between the usage column and the devices: spacing is the separator
@@ -135,7 +136,7 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
     gap_inner, pad = round(GAP_INNER * scale), round(PAD * scale)
     # The baseline that centres a digit's ink on the row (digits have no descenders).
     _left, digit_top, _right, digit_bottom = text_font.getbbox("0", anchor="ls")
-    to_baseline = (digit_bottom - digit_top) / 2
+    to_baseline = round((digit_bottom - digit_top) / 2)  # whole pixels: a half-pixel baseline blurs every stroke
 
     def glyph_size(it: Item) -> int:
         return round(glyph_px * it.glyph_scale)
@@ -183,12 +184,14 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
             cursor = x + glyph_slot + gap_inner
             if it.tag:
                 tag_fill = (*colour, min(fill[3], TAG_ALPHA))
-                canvas.text((cursor, mid + to_baseline), it.tag, font=text_font, fill=tag_fill, anchor="ls")
+                canvas.text(
+                    (round(cursor), round(mid) + to_baseline), it.tag, font=text_font, fill=tag_fill, anchor="ls"
+                )
             elif it.charging:
                 _paste_glyph(image, BOLT, bolt_px, cursor, mid, fill)
             if it.text:
                 right = cursor + prefix_slot + slot
-                canvas.text((right, mid + to_baseline), it.text, font=text_font, fill=fill, anchor="rs")
+                canvas.text((round(right), round(mid) + to_baseline), it.text, font=text_font, fill=fill, anchor="rs")
             # Hover areas split the column at the middle: top item above, bottom item below.
             top, bottom = (0, height // 2) if row == 0 else (height // 2, height)
             if len(column) == 1:
@@ -198,10 +201,13 @@ def render(items: list[Item], height: int, theme: Theme, scale: float = 1.0) -> 
     return _thicken_text(image), spans
 
 
-# Windows draws text with gamma-corrected antialiasing; FreeType's linear coverage looks thinner next
-# to the clock. Lifting the edge alpha along this curve matches it. Glyphs are already bold enough.
-_GAMMA = 0.6
-_ALPHA_CURVE = [v if v <= 1 else round(255 * (v / 255) ** _GAMMA) for v in range(256)]
+# Windows draws the clock with contrast-enhanced antialiasing: solid stems, thin edges. FreeType's
+# linear coverage spreads a stem over two grey pixels and reads blurry beside it ("the clock is
+# crisper", owner, 2026-10-22). This curve drops the faint fringe and lifts the rest; it was matched
+# against the clock's own pixels. Never below 1: a fully transparent pixel lets clicks through.
+_ALPHA_CURVE = [
+    v if v <= 1 else max(1, min(255, round(255 * (max(0, v - 20) / 235) ** 0.75 * 1.15))) for v in range(256)
+]
 
 
 def _thicken_text(image: Image.Image) -> Image.Image:

@@ -15,13 +15,14 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from juice_mate.core.alerts import Alerts
+from juice_mate.core.alerts import Alert, Alerts
 from juice_mate.core.display import items, metric_item
 from juice_mate.core.metric import Unit, short
 from juice_mate.core.reading import Reading, level
 from juice_mate.sources import Sensor, Source, poll_all
 from juice_mate.sources.bluetooth import Bluetooth
 from juice_mate.sources.claude import Claude
+from juice_mate.sources.claude_run import ClaudeRun
 from juice_mate.sources.hator import Hator
 from juice_mate.sources.system import (
     CpuLoad,
@@ -117,7 +118,7 @@ def _first_instance() -> bool:
     return ctypes.get_last_error() != _ERROR_ALREADY_EXISTS
 
 
-def run(sources: list[Source]) -> None:
+def run() -> None:
     from juice_mate.panel.window import MenuEntry, Panel
     from juice_mate.settings import Settings
     from juice_mate.tray.toasts import Toasts
@@ -128,6 +129,12 @@ def run(sources: list[Source]) -> None:
     updater = Updater()
     settings = Settings.load()
     catalog = sensors()
+    claude_run = ClaudeRun(lambda: settings.claude_prompt)
+    sources: list[Source] = [
+        Claude(run=claude_run, keep_window=lambda: settings.keep_claude_window),
+        Bluetooth(),
+        Hator(),
+    ]
 
     def quit_app() -> None:
         stop.set()
@@ -148,6 +155,10 @@ def run(sources: list[Source]) -> None:
         settings.save()
         wake.set()
 
+    def toggle_keep_window() -> None:
+        settings.keep_claude_window = not settings.keep_claude_window
+        settings.save()
+
     def menu() -> list[MenuEntry | None]:
         ready = updater.ready
         update = [MenuEntry(f"Restart to update to {ready}", updater.restart_now), None] if ready else []
@@ -159,6 +170,7 @@ def run(sources: list[Source]) -> None:
             *update,
             MenuEntry("Show", children=shown),
             MenuEntry("Refresh now", refresh_now),
+            MenuEntry("Keep Claude's 5-hour window running", toggle_keep_window, checked=settings.keep_claude_window),
             MenuEntry("Start with Windows", toggle_autostart, checked=autostart.is_enabled()),
             None,
             MenuEntry("Quit Juice-Mate", quit_app),
@@ -184,9 +196,12 @@ def run(sources: list[Source]) -> None:
             batteries_due = now + BATTERY_SECONDS
             for alert in alerts.check(readings):
                 toasts.show(alert)
+        reply = claude_run.take_reply()
+        if reply:
+            toasts.show(Alert("claude:run", "Claude", reply))
         moment = datetime.now()
         shown = [metric_item(s.read(), moment) for s in catalog if s.sensor in settings.sensors]
-        panel.show(items(readings, moment) + shown)
+        panel.show(items(readings, moment), shown)
         wake.wait(TICK_SECONDS)
         wake.clear()
     updater.stop()
@@ -213,4 +228,4 @@ def main() -> None:
     if not _first_instance():
         log.info("already running")
         return
-    run(battery_sources())
+    run()
