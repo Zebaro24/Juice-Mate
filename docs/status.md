@@ -119,3 +119,7 @@ idle window, the toast, a left-aligned taskbar.
 The run's default prompt is now the day's tech news: Juice-Mate reads The Verge, TechCrunch and
 Engadget RSS and Haiku picks two stories. Tried for real: 45 headlines, 7 s, the answer was a new
 Anthropic model and Sony's Pulse headset, one Russian line each.
+
+A news answer no longer repeats: the last three answers go back into the prompt as "already told".
+The logo (an upright battery full of juice, a mate leaf on the cap) is drawn by `scripts/logo.py` —
+`docs/logo.png` for the README, the exe's and Setup's `.ico` at build time; the local build passed.

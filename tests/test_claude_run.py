@@ -86,3 +86,19 @@ def test_asking_from_the_menu_skips_the_wait() -> None:
     run.request("idle window")
     run.request("asked from the menu", now_please=True)
     assert len(runner.calls) == 2
+
+
+def test_a_news_prompt_asks_for_other_stories_than_last_time() -> None:
+    runner, now = Runner(stdout="iPhone 18 is out"), [1000.0]
+    run = ClaudeRun(
+        lambda: "News:\n{news}",
+        runner,
+        exe=lambda: "claude",
+        clock=lambda: now[0],
+        background=False,
+        news=lambda: "- [X] Y",
+    )
+    run.request("menu", now_please=True)
+    run.request("menu", now_please=True)
+    assert "Already told" not in runner.calls[0][2]
+    assert runner.calls[1][2].endswith("Already told — pick other stories:\niPhone 18 is out")

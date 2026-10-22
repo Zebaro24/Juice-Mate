@@ -27,6 +27,7 @@ TIMEOUT = 120.0
 MODEL = "haiku"
 QUIET_PROMPT = "Reply with just: ok"  # an empty prompt in the settings: renew, no notification
 NEWS = "{news}"  # in the prompt: replaced by the last day's tech headlines
+TOLD_KEPT = 3  # answers remembered (two stories each) so a news prompt does not repeat itself
 _NO_WINDOW = 0x08000000  # CREATE_NO_WINDOW: no console flashes up from a windowed app
 
 
@@ -80,6 +81,7 @@ class ClaudeRun:
         self._next = 0.0
         self._busy = False
         self._reply: str | None = None
+        self._told: list[str] = []  # the last answers to a `{news}` prompt, so the next one differs
         self.finished = 0  # counts finished runs: a new value means "ask for the usage again now"
 
     def request(self, reason: str, now_please: bool = False) -> None:
@@ -109,6 +111,9 @@ class ClaudeRun:
             if NEWS in prompt:
                 news = self._news()
                 prompt = prompt.replace(NEWS, news) if news else ""  # no headlines: renew silently
+                if prompt and self._told:
+                    # The day's headlines barely change, so the same two stories would win every time.
+                    prompt += "\n\nAlready told — pick other stories:\n" + "\n".join(self._told)
             folder.mkdir(parents=True, exist_ok=True)
             done = self._run(
                 command(exe, prompt or QUIET_PROMPT),
@@ -124,6 +129,7 @@ class ClaudeRun:
                 log.warning("Claude Code run failed (%s): %s", done.returncode, (done.stderr or done.stdout)[:300])
             elif prompt and done.stdout.strip():
                 self._reply = done.stdout.strip()
+                self._told = (self._told + [self._reply])[-TOLD_KEPT:]
         except Exception:  # whatever happens, the run must end and free the next one
             log.exception("could not run Claude Code")
         finally:
