@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.1 — 2026-10-22
+
+Installing on a clean PC, fixed.
+
+- **Start with Windows works after install** — 0.3.0 installed without it; now it is on from the
+  installer, and uninstalling removes it.
+- **Setup no longer says "already installed"** — settings and the log moved to
+  `%APPDATA%\JuiceMate`, out of the program's folder; your settings come along on their own.
+
 ## v0.3.0 — 2026-10-22
 
 Two strips, text that matches the clock, and Claude limits that no longer wait for Claude Code.
